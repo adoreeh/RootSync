@@ -10,7 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 
 # Import solver logic
-from solver import FUNCTIONS, newton_raphson, validate_inputs
+from solver import FUNCTIONS, newton_raphson, validate_inputs, TEST_CASES
 
 # Import theme configuration
 from styles import (
@@ -67,6 +67,7 @@ class RootSyncApp:
         self.root_var = tk.StringVar(value="—")
         self.iterations_var = tk.StringVar(value="—")
         self.convergence_var = tk.StringVar(value="—")
+        self.test_case_var = tk.StringVar(value="Select Test Case...")
         self.loading_dots = 0
         
     def create_ui(self):
@@ -212,7 +213,7 @@ class RootSyncApp:
         
         # Max iterations
         iter_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
-        iter_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
+        iter_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
         
         tk.Label(
             iter_frame,
@@ -225,6 +226,29 @@ class RootSyncApp:
         self.iter_entry = ttk.Entry(iter_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
         self.iter_entry.pack(anchor='w', pady=(2, 0))
         self.iter_entry.insert(0, "20")
+        
+        # Test Case selector (for quick loading of documented test cases)
+        test_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        test_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
+        
+        tk.Label(
+            test_frame,
+            text="Load Test Case",
+            font=FONTS['small'],
+            bg=COLORS['bg_control'],
+            fg=COLORS['text_secondary']
+        ).pack(anchor='w')
+        
+        test_case_names = ["Select..."] + [tc['name'] for tc in TEST_CASES]
+        self.test_menu = ttk.OptionMenu(
+            test_frame,
+            self.test_case_var,
+            test_case_names[0],
+            *test_case_names,
+            command=self.load_test_case
+        )
+        self.test_menu.config(width=14)
+        self.test_menu.pack(anchor='w', pady=(2, 0))
         
         # Buttons frame (right side)
         buttons_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
@@ -463,10 +487,11 @@ class RootSyncApp:
         trail_content = tk.Frame(trail_outer, bg=COLORS['bg_secondary'])
         trail_content.pack(fill='both', expand=True, padx=DIMENSIONS['pad_sm'], pady=DIMENSIONS['pad_sm'])
         
-        # Create text widget with scrollbar
+        # Create text widget with scrollbars (read-only)
+        # Use wrap=NONE to prevent table from becoming jumbled when window is resized
         self.trail = tk.Text(
             trail_content,
-            wrap=tk.WORD,
+            wrap=tk.NONE,  # No wrapping - keeps table aligned
             font=FONTS['monospace'],
             bg=COLORS['bg_primary'],
             fg=COLORS['text_primary'],
@@ -475,17 +500,40 @@ class RootSyncApp:
             pady=12,
             spacing1=2,
             spacing2=1,
-            spacing3=2
+            spacing3=2,
+            state='disabled',  # Read-only by default
+            cursor='arrow'     # Normal cursor instead of text cursor
         )
         
-        scrollbar = ttk.Scrollbar(trail_content, orient='vertical', command=self.trail.yview)
-        self.trail.configure(yscrollcommand=scrollbar.set)
+        # Vertical scrollbar
+        v_scrollbar = ttk.Scrollbar(trail_content, orient='vertical', command=self.trail.yview)
+        # Horizontal scrollbar for wide table content
+        h_scrollbar = ttk.Scrollbar(trail_content, orient='horizontal', command=self.trail.xview)
+        self.trail.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
         
-        scrollbar.pack(side='right', fill='y')
-        self.trail.pack(side='left', fill='both', expand=True)
+        # Grid layout for scrollbars
+        self.trail.grid(row=0, column=0, sticky='nsew')
+        v_scrollbar.grid(row=0, column=1, sticky='ns')
+        h_scrollbar.grid(row=1, column=0, sticky='ew')
+        
+        # Configure grid weights
+        trail_content.grid_rowconfigure(0, weight=1)
+        trail_content.grid_columnconfigure(0, weight=1)
         
         # Configure text tags for styling
         self.configure_trail_tags()
+    
+    def trail_clear(self):
+        """Clear the solution trail (handles read-only state)"""
+        self.trail.config(state='normal')
+        self.trail.delete("1.0", tk.END)
+        self.trail.config(state='disabled')
+    
+    def trail_insert(self, text, tag="normal"):
+        """Insert text into solution trail (handles read-only state)"""
+        self.trail.config(state='normal')
+        self.trail.insert(tk.END, text, tag)
+        self.trail.config(state='disabled')
         
     def configure_trail_tags(self):
         """Configure text tags for solution trail styling"""
@@ -557,7 +605,7 @@ class RootSyncApp:
             return
             
         # Clear and reset
-        self.trail.delete("1.0", tk.END)
+        self.trail_clear()
         self.reset_status()
         
         # Start loading animation
@@ -574,13 +622,13 @@ class RootSyncApp:
         self.insert_section("VALIDATION")
         
         if not ok:
-            self.trail.insert(tk.END, f"Status: FAIL\n", "warning")
-            self.trail.insert(tk.END, f"Reason: {err}\n", "normal")
+            self.trail_insert(f"Status: FAIL\n", "warning")
+            self.trail_insert(f"Reason: {err}\n", "normal")
             self.stop_loading()
             self.set_badge("Error", "error")
             return
         else:
-            self.trail.insert(tk.END, "Status: PASS ✓\n\n", "success")
+            self.trail_insert("Status: PASS ✓\n\n", "success")
             
         # Schedule computation to allow UI update
         self.root.after(100, lambda: self.run_computation(data))
@@ -611,83 +659,136 @@ class RootSyncApp:
         self.stop_loading()
         
     def build_solution_trail(self, func_name, x0, tol, max_iter, result):
-        """Build the formatted solution trail"""
+        """Build the formatted solution trail with clear sections and real iteration data"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pyver = sys.version.split()[0]
         
+        # ═══════════════════════════════════════════════════════════════════
         # GIVEN section
+        # ═══════════════════════════════════════════════════════════════════
         self.insert_section("GIVEN")
-        self.trail.insert(tk.END, f"Function:        {func_name}\n", "normal")
-        self.trail.insert(tk.END, f"Initial Guess:   x₀ = {x0:.6f}\n", "normal")
-        self.trail.insert(tk.END, f"Tolerance:       ε = {tol}\n", "normal")
-        self.trail.insert(tk.END, f"Max Iterations:  {max_iter}\n\n", "normal")
+        self.trail_insert("\n", "normal")
+        self.trail_insert(f"  Function:        {func_name}\n", "normal")
+        self.trail_insert(f"  Initial Guess:   x₀ = {x0:.6f}\n", "normal")
+        self.trail_insert(f"  Tolerance:       ε = {tol}\n", "normal")
+        self.trail_insert(f"  Max Iterations:  {max_iter}\n", "normal")
+        self.trail_insert("\n", "normal")
         
+        # ═══════════════════════════════════════════════════════════════════
         # METHOD section
+        # ═══════════════════════════════════════════════════════════════════
         self.insert_section("METHOD")
-        self.trail.insert(tk.END, "Newton-Raphson Iteration\n", "subheader")
-        self.trail.insert(tk.END, "Formula: x_{n+1} = x_n - f(x_n) / f'(x_n)\n", "muted")
-        self.trail.insert(tk.END, "Stop when: |Δx| < ε\n\n", "muted")
+        self.trail_insert("\n", "normal")
+        self.trail_insert("  Newton-Raphson Iteration\n", "subheader")
+        self.trail_insert("\n", "normal")
+        self.trail_insert("  Formula:    x_{n+1} = x_n - f(x_n) / f'(x_n)\n", "muted")
+        self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
+        self.trail_insert("  Safety:     Stop if |f'(x)| < 1e-12 (derivative too small)\n", "muted")
+        self.trail_insert("\n", "normal")
         
-        # STEPS section
+        # ═══════════════════════════════════════════════════════════════════
+        # STEPS section - Real iteration table with all numeric values
+        # ═══════════════════════════════════════════════════════════════════
         self.insert_section("STEPS")
+        self.trail_insert("\n", "normal")
         
-        # Table header
-        header = " n │     x_n      │    f(x_n)    │   f'(x_n)    │   x_{n+1}    │    |Δx|    \n"
-        divider = "───┼──────────────┼──────────────┼──────────────┼──────────────┼────────────\n"
-        
-        self.trail.insert(tk.END, header, "table_header")
-        self.trail.insert(tk.END, divider, "divider")
-        
-        for row in result["rows"]:
-            line = (
-                f"{row['n']:>2} │ "
-                f"{row['x_n']:>12.6f} │ "
-                f"{row['f_x']:>12.6f} │ "
-                f"{row['df_x']:>12.6f} │ "
-                f"{row['x_next']:>12.6f} │ "
-                f"{row['dx']:>10.6f}\n"
-            )
-            self.trail.insert(tk.END, line, "table_row")
+        if len(result["rows"]) == 0:
+            self.trail_insert("  No iterations performed.\n", "warning")
+            self.trail_insert("  (Check if derivative is zero at initial guess)\n", "muted")
+        else:
+            # Table header
+            header = "  n │      x_n       │     f(x_n)     │    f'(x_n)     │    x_{n+1}     │     |Δx|     \n"
+            divider = " ───┼────────────────┼────────────────┼────────────────┼────────────────┼──────────────\n"
             
-        self.trail.insert(tk.END, "\n", "normal")
+            self.trail_insert(header, "table_header")
+            self.trail_insert(divider, "divider")
+            
+            # Real iteration data rows
+            for row in result["rows"]:
+                line = (
+                    f" {row['n']:>2} │ "
+                    f"{row['x_n']:>14.8f} │ "
+                    f"{row['f_x']:>14.8f} │ "
+                    f"{row['df_x']:>14.8f} │ "
+                    f"{row['x_next']:>14.8f} │ "
+                    f"{row['dx']:>12.8f}\n"
+                )
+                self.trail_insert(line, "table_row")
+            
+            # Show total iterations summary
+            self.trail_insert(divider, "divider")
+            self.trail_insert(f"\n  Total iterations: {len(result['rows'])}\n", "normal")
+            
+        self.trail_insert("\n", "normal")
         
+        # ═══════════════════════════════════════════════════════════════════
         # FINAL ANSWER section
+        # ═══════════════════════════════════════════════════════════════════
         self.insert_section("FINAL ANSWER")
+        self.trail_insert("\n", "normal")
         
         root_est = result["root"]
         converged = result["converged"]
         it_used = result["iterations"]
         
+        # Root estimate with visual emphasis
         if converged:
-            self.trail.insert(tk.END, f"  Root estimate: x ≈ {root_est:.6f}  \n", "success")
+            self.trail_insert(f"  ╔═══════════════════════════════════════╗\n", "success")
+            self.trail_insert(f"  ║  ROOT ESTIMATE:  x ≈ {root_est:>14.8f}  ║\n", "success")
+            self.trail_insert(f"  ╚═══════════════════════════════════════╝\n", "success")
         else:
-            self.trail.insert(tk.END, f"  Root estimate: x ≈ {root_est:.6f}  \n", "warning")
-            
-        self.trail.insert(tk.END, f"\nConverged:       {'YES ✓' if converged else 'NO ✗'}\n", "normal")
-        self.trail.insert(tk.END, f"Iterations:      {it_used}\n", "normal")
-        self.trail.insert(tk.END, f"Stop reason:     {result['stop_reason']}\n\n", "muted")
+            self.trail_insert(f"  ╔═══════════════════════════════════════╗\n", "warning")
+            self.trail_insert(f"  ║  ROOT ESTIMATE:  x ≈ {root_est:>14.8f}  ║\n", "warning")
+            self.trail_insert(f"  ╚═══════════════════════════════════════╝\n", "warning")
         
+        self.trail_insert("\n", "normal")
+        self.trail_insert(f"  Convergence Status:  {'CONVERGED ✓' if converged else 'NOT CONVERGED ✗'}\n", "normal")
+        self.trail_insert(f"  Iterations Used:     {it_used}\n", "normal")
+        self.trail_insert(f"  Stop Reason:         {result['stop_reason']}\n", "normal")
+        self.trail_insert("\n", "normal")
+        
+        # ═══════════════════════════════════════════════════════════════════
         # VERIFICATION section
+        # ═══════════════════════════════════════════════════════════════════
         self.insert_section("VERIFICATION")
-        self.trail.insert(tk.END, f"Residual: |f(x)| = {result['residual']:.6e}\n", "normal")
+        self.trail_insert("\n", "normal")
         
-        if converged:
-            self.trail.insert(tk.END, "Conclusion: Valid within tolerance ✓\n\n", "success")
+        residual = result['residual']
+        self.trail_insert(f"  Residual Check: |f(x)| = {residual:.10e}\n", "normal")
+        self.trail_insert(f"  Tolerance:      ε = {tol}\n", "normal")
+        self.trail_insert("\n", "normal")
+        
+        if converged and residual < tol * 10:
+            self.trail_insert("  ✓ CONCLUSION: Solution is VALID within tolerance.\n", "success")
+            self.trail_insert(f"    The root x ≈ {root_est:.8f} satisfies f(x) ≈ 0.\n", "muted")
+        elif converged:
+            self.trail_insert("  ✓ CONCLUSION: Converged, residual slightly above tolerance.\n", "success")
+            self.trail_insert(f"    The root x ≈ {root_est:.8f} is a good approximation.\n", "muted")
         else:
-            self.trail.insert(tk.END, "Conclusion: Not within tolerance. Consider adjusting x₀ or max iterations.\n\n", "warning")
+            self.trail_insert("  ✗ CONCLUSION: NOT within tolerance.\n", "warning")
+            self.trail_insert("    Consider: (1) Different initial guess, or\n", "muted")
+            self.trail_insert("              (2) Increase max iterations, or\n", "muted")
+            self.trail_insert("              (3) Loosen tolerance.\n", "muted")
             
+        self.trail_insert("\n", "normal")
+        
+        # ═══════════════════════════════════════════════════════════════════
         # SUMMARY section
+        # ═══════════════════════════════════════════════════════════════════
         self.insert_section("SUMMARY")
-        self.trail.insert(tk.END, f"Timestamp:  {timestamp}\n", "muted")
-        self.trail.insert(tk.END, f"Python:     {pyver}\n", "muted")
-        self.trail.insert(tk.END, f"Platform:   {platform.system()} {platform.release()}\n", "muted")
-        self.trail.insert(tk.END, f"Graph:      {'Enabled' if MATPLOTLIB_OK else 'Disabled'}\n", "muted")
+        self.trail_insert("\n", "normal")
+        self.trail_insert(f"  Timestamp:    {timestamp}\n", "muted")
+        self.trail_insert(f"  Python:       {pyver}\n", "muted")
+        self.trail_insert(f"  Platform:     {platform.system()} {platform.release()}\n", "muted")
+        self.trail_insert(f"  Graph:        {'Enabled' if MATPLOTLIB_OK else 'Disabled'}\n", "muted")
+        self.trail_insert("\n", "normal")
         
     def insert_section(self, title):
-        """Insert a styled section header"""
-        self.trail.insert(tk.END, f"{'─' * 50}\n", "divider")
-        self.trail.insert(tk.END, f"  {title}\n", "section")
-        self.trail.insert(tk.END, f"{'─' * 50}\n", "divider")
+        """Insert a styled section header with clear visual separation"""
+        self.trail_insert("\n", "normal")
+        self.trail_insert(f"{'═' * 52}\n", "divider")
+        self.trail_insert(f"  {title}\n", "section")
+        self.trail_insert(f"{'═' * 52}\n", "divider")
         
     # =========================================================================
     # STATUS UPDATES
@@ -873,7 +974,7 @@ class RootSyncApp:
     def clear(self):
         """Reset all inputs and outputs"""
         # Clear trail
-        self.trail.delete("1.0", tk.END)
+        self.trail_clear()
         
         # Reset status
         self.root_var.set("—")
@@ -889,6 +990,9 @@ class RootSyncApp:
         self.tol_entry.insert(0, "0.0001")
         self.iter_entry.insert(0, "20")
         
+        # Reset test case selector
+        self.test_case_var.set("Select...")
+        
         # Clear graph
         if MATPLOTLIB_OK and self.ax:
             colors = get_graph_colors()
@@ -898,3 +1002,47 @@ class RootSyncApp:
             self.ax.set_xlabel("x", fontsize=10, color=colors['text'])
             self.ax.set_ylabel("f(x)", fontsize=10, color=colors['text'])
             self.canvas.draw()
+    
+    # =========================================================================
+    # LOAD TEST CASE
+    # =========================================================================
+    def load_test_case(self, selection):
+        """Load a predefined test case into the input fields"""
+        if selection == "Select...":
+            return
+            
+        # Find the matching test case
+        for tc in TEST_CASES:
+            if tc['name'] == selection:
+                # Map function name to dropdown options
+                func_map = {
+                    "f(x) = x² − 4": "f(x) = x² - 4",
+                    "f(x) = x³ − x − 2": "f(x) = x³ - x - 2",
+                    "f(x) = e⁻ˣ − x": "f(x) = e⁻ˣ - x",
+                }
+                
+                # Set function (handle slight character differences)
+                func_key = tc['function']
+                if func_key in func_map:
+                    func_key = func_map[func_key]
+                    
+                # Find matching function in FUNCTIONS keys
+                for key in FUNCTIONS.keys():
+                    # Normalize comparison
+                    if func_key.replace('−', '-') == key.replace('−', '-'):
+                        self.func_var.set(key)
+                        break
+                
+                # Set initial guess
+                self.x0_entry.delete(0, tk.END)
+                self.x0_entry.insert(0, str(tc['x0']))
+                
+                # Set tolerance
+                self.tol_entry.delete(0, tk.END)
+                self.tol_entry.insert(0, str(tc['tol']))
+                
+                # Set max iterations
+                self.iter_entry.delete(0, tk.END)
+                self.iter_entry.insert(0, str(tc['max_iter']))
+                
+                break

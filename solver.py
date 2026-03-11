@@ -1,6 +1,36 @@
 """
 RootSync - Newton-Raphson Solver
 Core computation logic for root finding
+
+=============================================================================
+ BUILT-IN TEST CASES (Week 4 Requirement)
+=============================================================================
+
+ Test Case 1:
+   Function:       f(x) = x² − 4
+   Initial Guess:  x₀ = 3
+   Tolerance:      ε = 0.0001
+   Max Iterations: 20
+   Expected Root:  x ≈ 2.0000
+   Notes:          Simple quadratic, converges quickly in ~4 iterations
+
+ Test Case 2:
+   Function:       f(x) = x³ − x − 2
+   Initial Guess:  x₀ = 1.5
+   Tolerance:      ε = 0.0001
+   Max Iterations: 20
+   Expected Root:  x ≈ 1.5214
+   Notes:          Cubic function, converges in ~4 iterations
+
+ Test Case 3:
+   Function:       f(x) = e⁻ˣ − x
+   Initial Guess:  x₀ = 0.5
+   Tolerance:      ε = 0.0001
+   Max Iterations: 20
+   Expected Root:  x ≈ 0.5671 (Lambert W function solution)
+   Notes:          Transcendental function, converges in ~3 iterations
+
+=============================================================================
 """
 
 import math
@@ -110,6 +140,96 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
         "stop_reason": stop_reason,
         "residual": residual,
     }
+
+
+# =============================================================================
+# INPUT VALIDATION
+# =============================================================================
+# =============================================================================
+# TEST CASES (for programmatic verification)
+# =============================================================================
+TEST_CASES = [
+    {
+        "name": "Test Case 1",
+        "function": "f(x) = x² − 4",
+        "x0": 3.0,
+        "tol": 0.0001,
+        "max_iter": 20,
+        "expected_root": 2.0,
+        "description": "Simple quadratic function with exact root at x=2"
+    },
+    {
+        "name": "Test Case 2",
+        "function": "f(x) = x³ − x − 2",
+        "x0": 1.5,
+        "tol": 0.0001,
+        "max_iter": 20,
+        "expected_root": 1.5214,
+        "description": "Cubic function - real root approximation"
+    },
+    {
+        "name": "Test Case 3",
+        "function": "f(x) = e⁻ˣ − x",
+        "x0": 0.5,
+        "tol": 0.0001,
+        "max_iter": 20,
+        "expected_root": 0.5671,
+        "description": "Transcendental function - Lambert W solution"
+    },
+]
+
+
+def run_test_cases():
+    """
+    Run all built-in test cases and print results.
+    Call this function to verify the solver works correctly.
+    
+    Usage:
+        from solver import run_test_cases
+        run_test_cases()
+    """
+    print("\n" + "=" * 60)
+    print(" NEWTON-RAPHSON SOLVER - TEST CASE VERIFICATION")
+    print("=" * 60)
+    
+    func_map = {
+        "f(x) = x² − 4": (f1, df1),
+        "f(x) = x³ − x − 2": (f2, df2),
+        "f(x) = e⁻ˣ − x": (f3, df3),
+    }
+    
+    all_passed = True
+    
+    for tc in TEST_CASES:
+        print(f"\n{tc['name']}: {tc['function']}")
+        print("-" * 50)
+        
+        f, df = func_map[tc['function']]
+        result = newton_raphson(f, df, tc['x0'], tc['tol'], tc['max_iter'])
+        
+        root = result['root']
+        expected = tc['expected_root']
+        error = abs(root - expected)
+        passed = error < 0.01  # Allow 1% tolerance for test verification
+        
+        print(f"  Initial Guess:  x₀ = {tc['x0']}")
+        print(f"  Tolerance:      ε = {tc['tol']}")
+        print(f"  Max Iterations: {tc['max_iter']}")
+        print(f"  Computed Root:  x ≈ {root:.6f}")
+        print(f"  Expected Root:  x ≈ {expected:.4f}")
+        print(f"  Error:          |Δ| = {error:.6f}")
+        print(f"  Converged:      {result['converged']}")
+        print(f"  Iterations:     {result['iterations']}")
+        print(f"  Status:         {'✓ PASS' if passed else '✗ FAIL'}")
+        
+        if not passed:
+            all_passed = False
+    
+    print("\n" + "=" * 60)
+    print(f" OVERALL RESULT: {'ALL TESTS PASSED ✓' if all_passed else 'SOME TESTS FAILED ✗'}")
+    print("=" * 60 + "\n")
+    
+    return all_passed
 
 
 # =============================================================================

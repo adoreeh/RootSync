@@ -685,6 +685,17 @@ class RootSyncApp:
         self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
         self.trail_insert("  Safety:     Stop if |f'(x)| < 1e-12 (derivative too small)\n", "muted")
         self.trail_insert("\n", "normal")
+
+        # ═══════════════════════════════════════════════════════════════════
+        # STOPPING RULE section - Explicit completion reason for documentation
+        # ═══════════════════════════════════════════════════════════════════
+        reason_text, reason_tag = self.get_stop_reason_display(result)
+        self.insert_section("STOPPING RULE")
+        self.trail_insert("\n", "normal")
+        self.trail_insert("  Completion Reason\n", "subheader")
+        self.trail_insert("  ───────────────────────────────────────────────\n", "divider")
+        self.trail_insert(f"  {reason_text}\n", reason_tag)
+        self.trail_insert("\n", "normal")
         
         # ═══════════════════════════════════════════════════════════════════
         # STEPS section - Real iteration table with all numeric values
@@ -730,6 +741,7 @@ class RootSyncApp:
         root_est = result["root"]
         converged = result["converged"]
         it_used = result["iterations"]
+        stop_reason_display, stop_reason_tag = self.get_stop_reason_display(result)
         
         # Root estimate with visual emphasis
         if converged:
@@ -744,7 +756,7 @@ class RootSyncApp:
         self.trail_insert("\n", "normal")
         self.trail_insert(f"  Convergence Status:  {'CONVERGED ✓' if converged else 'NOT CONVERGED ✗'}\n", "normal")
         self.trail_insert(f"  Iterations Used:     {it_used}\n", "normal")
-        self.trail_insert(f"  Stop Reason:         {result['stop_reason']}\n", "normal")
+        self.trail_insert(f"  Stop Reason:         {stop_reason_display}\n", stop_reason_tag)
         self.trail_insert("\n", "normal")
         
         # ═══════════════════════════════════════════════════════════════════
@@ -789,6 +801,15 @@ class RootSyncApp:
         self.trail_insert(f"{'═' * 52}\n", "divider")
         self.trail_insert(f"  {title}\n", "section")
         self.trail_insert(f"{'═' * 52}\n", "divider")
+
+    def get_stop_reason_display(self, result):
+        """Map solver stop reason to a clear, documented message and tag"""
+        stop_reason = result.get("stop_reason", "").lower()
+        if result.get("converged"):
+            return ("Tolerance condition satisfied: |Δx| < ε", "success")
+        if "derivative" in stop_reason:
+            return ("Derivative too small, computation stopped safely", "warning")
+        return ("Maximum iterations reached before convergence", "warning")
         
     # =========================================================================
     # STATUS UPDATES

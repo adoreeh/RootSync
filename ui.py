@@ -10,7 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 
 # Import solver logic
-from solver import FUNCTIONS, newton_raphson, validate_inputs, TEST_CASES
+from solver import FUNCTIONS, newton_raphson, secant_method, validate_inputs, TEST_CASES
 
 # Import theme configuration
 from styles import (
@@ -63,6 +63,7 @@ class RootSyncApp:
     def setup_variables(self):
         """Initialize tkinter variables"""
         self.func_var = tk.StringVar(value=list(FUNCTIONS.keys())[0])
+        self.method_var = tk.StringVar(value="Newton-Raphson")
         self.status_var = tk.StringVar(value="Ready")
         self.root_var = tk.StringVar(value="—")
         self.iterations_var = tk.StringVar(value="—")
@@ -158,10 +159,32 @@ class RootSyncApp:
         control_inner = tk.Frame(control_panel, bg=COLORS['bg_control'])
         control_inner.pack(fill='x', padx=DIMENSIONS['pad_lg'], pady=DIMENSIONS['pad_md'])
         
+        # Method selector
+        method_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        method_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
+
+        tk.Label(
+            method_frame,
+            text="Method",
+            font=FONTS['small'],
+            bg=COLORS['bg_control'],
+            fg=COLORS['text_secondary']
+        ).pack(anchor='w')
+
+        self.method_menu = ttk.OptionMenu(
+            method_frame,
+            self.method_var,
+            self.method_var.get(),
+            "Newton-Raphson",
+            "Secant Method"
+        )
+        self.method_menu.config(width=18)
+        self.method_menu.pack(anchor='w', pady=(2, 0))
+
         # Function selector
         func_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
         func_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
-        
+
         tk.Label(
             func_frame,
             text="Function",
@@ -169,7 +192,7 @@ class RootSyncApp:
             bg=COLORS['bg_control'],
             fg=COLORS['text_secondary']
         ).pack(anchor='w')
-        
+
         self.func_menu = ttk.OptionMenu(
             func_frame,
             self.func_var,
@@ -194,6 +217,22 @@ class RootSyncApp:
         self.x0_entry = ttk.Entry(x0_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
         self.x0_entry.pack(anchor='w', pady=(2, 0))
         self.x0_entry.insert(0, "1.5")
+
+        # Second guess (x1) for Secant Method
+        x1_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        x1_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
+
+        tk.Label(
+            x1_frame,
+            text="Second Guess (x₁)",
+            font=FONTS['small'],
+            bg=COLORS['bg_control'],
+            fg=COLORS['text_secondary']
+        ).pack(anchor='w')
+
+        self.x1_entry = ttk.Entry(x1_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
+        self.x1_entry.pack(anchor='w', pady=(2, 0))
+        self.x1_entry.insert(0, "2.0")
         
         # Tolerance
         tol_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
@@ -600,7 +639,7 @@ class RootSyncApp:
     # COMPUTATION
     # =========================================================================
     def compute(self):
-        """Run Newton-Raphson computation"""
+        """Run computation for the selected method"""
         if self.is_computing:
             return
             
@@ -615,7 +654,9 @@ class RootSyncApp:
         ok, data, err = validate_inputs(
             self.x0_entry.get(),
             self.tol_entry.get(),
-            self.iter_entry.get()
+            self.iter_entry.get(),
+            method=self.method_var.get(),
+            x1_raw=self.x1_entry.get()
         )
         
         # Log validation
@@ -634,31 +675,35 @@ class RootSyncApp:
         self.root.after(100, lambda: self.run_computation(data))
         
     def run_computation(self, data):
-        """Execute the Newton-Raphson solver"""
+        """Execute the selected solver"""
         func_name = self.func_var.get()
+        method_name = self.method_var.get()
         f, df = FUNCTIONS[func_name]
         
         x0 = data["x0"]
         tol = data["tol"]
         max_iter = data["max_iter"]
+        x1 = data.get("x1")
         
-        # Run solver
-        result = newton_raphson(f, df, x0, tol, max_iter)
+        if method_name == "Secant Method":
+            result = secant_method(f, x0, x1, tol, max_iter)
+        else:
+            result = newton_raphson(f, df, x0, tol, max_iter)
         
         # Build solution trail
-        self.build_solution_trail(func_name, x0, tol, max_iter, result)
+        self.build_solution_trail(func_name, method_name, x0, x1, tol, max_iter, result)
         
         # Update status panel
         self.update_status(result)
         
         # Plot graph
         if MATPLOTLIB_OK:
-            self.plot_function(func_name, f, result, x0)
+            self.plot_function(func_name, f, result, x0, method_name, x1)
             
         # Stop loading
         self.stop_loading()
         
-    def build_solution_trail(self, func_name, x0, tol, max_iter, result):
+    def build_solution_trail(self, func_name, method_name, x0, x1, tol, max_iter, result):
         """Build the formatted solution trail with clear sections and real iteration data"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pyver = sys.version.split()[0]
@@ -668,8 +713,11 @@ class RootSyncApp:
         # ═══════════════════════════════════════════════════════════════════
         self.insert_section("GIVEN")
         self.trail_insert("\n", "normal")
+        self.trail_insert(f"  Method:          {method_name}\n", "normal")
         self.trail_insert(f"  Function:        {func_name}\n", "normal")
         self.trail_insert(f"  Initial Guess:   x₀ = {x0:.6f}\n", "normal")
+        if method_name == "Secant Method" and x1 is not None:
+            self.trail_insert(f"  Second Guess:    x₁ = {x1:.6f}\n", "normal")
         self.trail_insert(f"  Tolerance:       ε = {tol}\n", "normal")
         self.trail_insert(f"  Max Iterations:  {max_iter}\n", "normal")
         self.trail_insert("\n", "normal")
@@ -679,17 +727,24 @@ class RootSyncApp:
         # ═══════════════════════════════════════════════════════════════════
         self.insert_section("METHOD")
         self.trail_insert("\n", "normal")
-        self.trail_insert("  Newton-Raphson Iteration\n", "subheader")
-        self.trail_insert("\n", "normal")
-        self.trail_insert("  Formula:    x_{n+1} = x_n - f(x_n) / f'(x_n)\n", "muted")
-        self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
-        self.trail_insert("  Safety:     Stop if |f'(x)| < 1e-12 (derivative too small)\n", "muted")
+        if method_name == "Secant Method":
+            self.trail_insert("  Secant Method\n", "subheader")
+            self.trail_insert("\n", "normal")
+            self.trail_insert("  Formula:    x_{n+1} = x_n - f(x_n)(x_n - x_{n-1}) / (f(x_n) - f(x_{n-1}))\n", "muted")
+            self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
+            self.trail_insert("  Safety:     Stop if denominator is too small (|f(x_n) - f(x_{n-1})| < 1e-12)\n", "muted")
+        else:
+            self.trail_insert("  Newton-Raphson Iteration\n", "subheader")
+            self.trail_insert("\n", "normal")
+            self.trail_insert("  Formula:    x_{n+1} = x_n - f(x_n) / f'(x_n)\n", "muted")
+            self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
+            self.trail_insert("  Safety:     Stop if |f'(x)| < 1e-12 (derivative too small)\n", "muted")
         self.trail_insert("\n", "normal")
 
         # ═══════════════════════════════════════════════════════════════════
         # STOPPING RULE section - Explicit completion reason for documentation
         # ═══════════════════════════════════════════════════════════════════
-        reason_text, reason_tag = self.get_stop_reason_display(result)
+        reason_text, reason_tag = self.get_stop_reason_display(result, method_name)
         self.insert_section("STOPPING RULE")
         self.trail_insert("\n", "normal")
         self.trail_insert("  Completion Reason\n", "subheader")
@@ -705,26 +760,43 @@ class RootSyncApp:
         
         if len(result["rows"]) == 0:
             self.trail_insert("  No iterations performed.\n", "warning")
-            self.trail_insert("  (Check if derivative is zero at initial guess)\n", "muted")
+            self.trail_insert("  (Check if derivative/denominator is too small at initial guesses)\n", "muted")
         else:
-            # Table header
-            header = "  n │      x_n       │     f(x_n)     │    f'(x_n)     │    x_{n+1}     │     |Δx|     \n"
-            divider = " ───┼────────────────┼────────────────┼────────────────┼────────────────┼──────────────\n"
-            
-            self.trail_insert(header, "table_header")
-            self.trail_insert(divider, "divider")
-            
-            # Real iteration data rows
-            for row in result["rows"]:
-                line = (
-                    f" {row['n']:>2} │ "
-                    f"{row['x_n']:>14.8f} │ "
-                    f"{row['f_x']:>14.8f} │ "
-                    f"{row['df_x']:>14.8f} │ "
-                    f"{row['x_next']:>14.8f} │ "
-                    f"{row['dx']:>12.8f}\n"
-                )
-                self.trail_insert(line, "table_row")
+            if method_name == "Secant Method":
+                header = "  n │    x_(n-1)     │      x_n       │   f(x_(n-1))   │    f(x_n)      │    x_{n+1}     │     |Δx|     \n"
+                divider = " ───┼────────────────┼────────────────┼────────────────┼────────────────┼────────────────┼──────────────\n"
+                self.trail_insert(header, "table_header")
+                self.trail_insert(divider, "divider")
+
+                for row in result["rows"]:
+                    line = (
+                        f" {row['n']:>2} │ "
+                        f"{row['x_prev']:>14.8f} │ "
+                        f"{row['x_curr']:>14.8f} │ "
+                        f"{row['f_prev']:>14.8f} │ "
+                        f"{row['f_curr']:>14.8f} │ "
+                        f"{row['x_next']:>14.8f} │ "
+                        f"{row['dx']:>12.8f}\n"
+                    )
+                    self.trail_insert(line, "table_row")
+            else:
+                header = "  n │      x_n       │     f(x_n)     │    f'(x_n)     │    x_{n+1}     │     |Δx|     \n"
+                divider = " ───┼────────────────┼────────────────┼────────────────┼────────────────┼──────────────\n"
+                
+                self.trail_insert(header, "table_header")
+                self.trail_insert(divider, "divider")
+                
+                # Real iteration data rows
+                for row in result["rows"]:
+                    line = (
+                        f" {row['n']:>2} │ "
+                        f"{row['x_n']:>14.8f} │ "
+                        f"{row['f_x']:>14.8f} │ "
+                        f"{row['df_x']:>14.8f} │ "
+                        f"{row['x_next']:>14.8f} │ "
+                        f"{row['dx']:>12.8f}\n"
+                    )
+                    self.trail_insert(line, "table_row")
             
             # Show total iterations summary
             self.trail_insert(divider, "divider")
@@ -741,7 +813,7 @@ class RootSyncApp:
         root_est = result["root"]
         converged = result["converged"]
         it_used = result["iterations"]
-        stop_reason_display, stop_reason_tag = self.get_stop_reason_display(result)
+        stop_reason_display, stop_reason_tag = self.get_stop_reason_display(result, method_name)
         
         # Root estimate with visual emphasis
         if converged:
@@ -802,13 +874,15 @@ class RootSyncApp:
         self.trail_insert(f"  {title}\n", "section")
         self.trail_insert(f"{'═' * 52}\n", "divider")
 
-    def get_stop_reason_display(self, result):
+    def get_stop_reason_display(self, result, method_name):
         """Map solver stop reason to a clear, documented message and tag"""
         stop_reason = result.get("stop_reason", "").lower()
         if result.get("converged"):
             return ("Tolerance condition satisfied: |Δx| < ε", "success")
         if "derivative" in stop_reason:
             return ("Derivative too small, computation stopped safely", "warning")
+        if "denominator" in stop_reason and method_name == "Secant Method":
+            return ("Denominator too small, secant step stopped for safety", "warning")
         return ("Maximum iterations reached before convergence", "warning")
         
     # =========================================================================
@@ -903,7 +977,7 @@ class RootSyncApp:
     # =========================================================================
     # PLOTTING
     # =========================================================================
-    def plot_function(self, func_name, f, result, x0):
+    def plot_function(self, func_name, f, result, x0, method_name, x1=None):
         """Plot the function with iteration points"""
         colors = get_graph_colors()
         
@@ -914,9 +988,12 @@ class RootSyncApp:
         root_est = result['root']
         rows = result['rows']
         
-        # Determine x range
-        center = (x0 + root_est) / 2.0
-        span = max(2.0, abs(root_est - x0) * 4.0)
+        # Determine x range using both initial guesses when available
+        base_points = [x0, root_est]
+        if x1 is not None:
+            base_points.append(x1)
+        center = sum(base_points) / len(base_points)
+        span = max(2.0, max(abs(center - p) for p in base_points) * 4.0)
         x_min = center - span
         x_max = center + span
         
@@ -943,7 +1020,7 @@ class RootSyncApp:
         # Plot x-axis
         self.ax.axhline(0, color=colors['axis'], linewidth=1)
         
-        # Plot initial guess
+        # Plot initial guesses
         try:
             self.ax.scatter(
                 [x0], [f(x0)],
@@ -951,13 +1028,24 @@ class RootSyncApp:
                 marker='o', zorder=5,
                 label=f'x₀ = {x0:.2f}'
             )
+            if x1 is not None:
+                self.ax.scatter(
+                    [x1], [f(x1)],
+                    s=80, color=colors['accent_secondary'],
+                    marker='D', zorder=5,
+                    label=f'x₁ = {x1:.2f}'
+                )
         except Exception:
             pass
             
         # Plot iteration points
         if rows:
-            iter_xs = [r["x_n"] for r in rows]
-            iter_ys = [r["f_x"] for r in rows]
+            if method_name == "Secant Method":
+                iter_xs = [r["x_curr"] for r in rows]
+                iter_ys = [r["f_curr"] for r in rows]
+            else:
+                iter_xs = [r["x_n"] for r in rows]
+                iter_ys = [r["f_x"] for r in rows]
             self.ax.scatter(
                 iter_xs, iter_ys,
                 s=40, color=colors['points'],
@@ -1006,10 +1094,13 @@ class RootSyncApp:
         self.x0_entry.delete(0, tk.END)
         self.tol_entry.delete(0, tk.END)
         self.iter_entry.delete(0, tk.END)
+        self.x1_entry.delete(0, tk.END)
         
         self.x0_entry.insert(0, "1.5")
         self.tol_entry.insert(0, "0.0001")
         self.iter_entry.insert(0, "20")
+        self.x1_entry.insert(0, "2.0")
+        self.method_var.set("Newton-Raphson")
         
         # Reset test case selector
         self.test_case_var.set("Select...")

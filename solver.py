@@ -143,6 +143,79 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
 
 
 # =============================================================================
+# SECANT METHOD SOLVER
+# =============================================================================
+def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
+    """
+    Perform Secant Method iteration to find root of f(x) = 0.
+
+    Parameters:
+        f: Function to find root of
+        x0: First initial guess
+        x1: Second initial guess
+        tol: Tolerance for convergence (|Δx| < tol)
+        max_iter: Maximum number of iterations
+        denom_eps: Minimum acceptable denominator magnitude
+
+    Returns a dict with the same shape as newton_raphson().
+    """
+    rows = []
+    x_prev = x0
+    x_curr = x1
+    converged = False
+    stop_reason = ""
+    iterations_used = 0
+
+    for n in range(max_iter):
+        f_prev = f(x_prev)
+        f_curr = f(x_curr)
+
+        denom = f_curr - f_prev
+        if abs(denom) < denom_eps:
+            stop_reason = f"Stopped: denominator too small (|f(x_n) - f(x_(n-1))| < {denom_eps})."
+            iterations_used = n
+            break
+
+        x_next = x_curr - f_curr * (x_curr - x_prev) / denom
+        dx = abs(x_next - x_curr)
+
+        rows.append({
+            "n": n,
+            "x_prev": x_prev,
+            "x_curr": x_curr,
+            "f_prev": f_prev,
+            "f_curr": f_curr,
+            "x_next": x_next,
+            "dx": dx,
+        })
+
+        if dx < tol:
+            converged = True
+            x_curr = x_next
+            iterations_used = n + 1
+            stop_reason = "Converged: |Δx| < tolerance."
+            break
+
+        x_prev = x_curr
+        x_curr = x_next
+        iterations_used = n + 1
+
+    if not converged and stop_reason == "":
+        stop_reason = "Not converged: reached maximum iterations."
+
+    residual = abs(f(x_curr))
+
+    return {
+        "converged": converged,
+        "root": x_curr,
+        "iterations": iterations_used,
+        "rows": rows,
+        "stop_reason": stop_reason,
+        "residual": residual,
+    }
+
+
+# =============================================================================
 # INPUT VALIDATION
 # =============================================================================
 # =============================================================================
@@ -235,14 +308,16 @@ def run_test_cases():
 # =============================================================================
 # INPUT VALIDATION
 # =============================================================================
-def validate_inputs(x0_raw, tol_raw, max_iter_raw):
+def validate_inputs(x0_raw, tol_raw, max_iter_raw, method="Newton-Raphson", x1_raw=None):
     """
-    Validate user inputs for Newton-Raphson computation.
+    Validate user inputs for supported root-finding computations.
     
     Parameters:
-        x0_raw: Raw string for initial guess
+        x0_raw: Raw string for initial guess x0
         tol_raw: Raw string for tolerance
         max_iter_raw: Raw string for max iterations
+        method: Selected method name
+        x1_raw: Raw string for second guess (secant only)
     
     Returns:
         tuple: (ok: bool, data: dict or None, error_message: str)
@@ -250,9 +325,14 @@ def validate_inputs(x0_raw, tol_raw, max_iter_raw):
     x0_str = x0_raw.strip()
     tol_str = tol_raw.strip()
     it_str = max_iter_raw.strip()
+    method_str = (method or "").strip()
+    x1_str = x1_raw.strip() if x1_raw is not None else ""
 
     if not x0_str or not tol_str or not it_str:
         return (False, None, "All fields are required (x₀, tolerance, max iterations).")
+
+    if method_str.lower().startswith("secant") and not x1_str:
+        return (False, None, "Second Guess (x₁) is required for Secant Method.")
 
     try:
         x0 = float(x0_str)
@@ -269,10 +349,21 @@ def validate_inputs(x0_raw, tol_raw, max_iter_raw):
     except ValueError:
         return (False, None, "Max Iterations must be an integer.")
 
+    x1 = None
+    if x1_str:
+        try:
+            x1 = float(x1_str)
+        except ValueError:
+            return (False, None, "Second Guess (x₁) must be a valid number.")
+
     if tol <= 0:
         return (False, None, "Tolerance must be greater than 0.")
     
     if max_iter <= 0 or max_iter > 1000:
         return (False, None, "Max Iterations must be between 1 and 1000.")
 
-    return (True, {"x0": x0, "tol": tol, "max_iter": max_iter}, "")
+    data = {"x0": x0, "tol": tol, "max_iter": max_iter}
+    if x1 is not None:
+        data["x1"] = x1
+
+    return (True, data, "")

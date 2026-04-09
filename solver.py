@@ -35,6 +35,11 @@ Core computation logic for root finding
 
 import math
 
+
+def _is_finite_number(value):
+    """Return True when value is a finite int/float."""
+    return isinstance(value, (int, float)) and math.isfinite(value)
+
 # =============================================================================
 # PREDEFINED FUNCTIONS (f, f')
 # =============================================================================
@@ -95,18 +100,49 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
     converged = False
     stop_reason = ""
     iterations_used = 0
+    warnings = []
+
+    if not _is_finite_number(x):
+        return {
+            "converged": False,
+            "root": x0,
+            "iterations": 0,
+            "rows": rows,
+            "stop_reason": "Stopped: non-finite initial guess.",
+            "residual": float("inf"),
+            "warnings": ["Initial guess is not finite (NaN/Inf)."],
+        }
 
     for n in range(max_iter):
-        fx = f(x)
-        dfx = df(x)
+        try:
+            fx = f(x)
+            dfx = df(x)
+        except Exception as exc:
+            stop_reason = "Stopped: function/derivative evaluation error."
+            warnings.append(f"Evaluation error at iteration {n}: {exc.__class__.__name__}: {exc}")
+            iterations_used = n
+            break
+
+        if not _is_finite_number(fx) or not _is_finite_number(dfx):
+            stop_reason = "Stopped: non-finite function value encountered."
+            warnings.append(f"Non-finite value at iteration {n} (f(x)={fx}, f'(x)={dfx}).")
+            iterations_used = n
+            break
 
         if abs(dfx) < deriv_eps:
             stop_reason = f"Stopped: derivative too small (|f'(x)| < {deriv_eps})."
+            warnings.append("Derivative near zero; Newton step would be unstable.")
             iterations_used = n
             break
 
         x_next = x - (fx / dfx)
         dx = abs(x_next - x)
+
+        if not _is_finite_number(x_next) or not _is_finite_number(dx):
+            stop_reason = "Stopped: non-finite iteration step encountered."
+            warnings.append(f"Unstable update at iteration {n}; x_(n+1) became {x_next}.")
+            iterations_used = n
+            break
 
         rows.append({
             "n": n,
@@ -129,8 +165,16 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
 
     if not converged and stop_reason == "":
         stop_reason = "Not converged: reached maximum iterations."
+        warnings.append("Maximum iterations reached before tolerance was satisfied.")
 
-    residual = abs(f(x))
+    try:
+        residual_raw = f(x)
+        residual = abs(residual_raw) if _is_finite_number(residual_raw) else float("inf")
+        if not _is_finite_number(residual_raw):
+            warnings.append("Residual is non-finite at final estimate.")
+    except Exception as exc:
+        residual = float("inf")
+        warnings.append(f"Residual evaluation failed: {exc.__class__.__name__}: {exc}")
 
     return {
         "converged": converged,
@@ -139,6 +183,7 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
         "rows": rows,
         "stop_reason": stop_reason,
         "residual": residual,
+        "warnings": warnings,
     }
 
 
@@ -165,19 +210,50 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
     converged = False
     stop_reason = ""
     iterations_used = 0
+    warnings = []
+
+    if not _is_finite_number(x_prev) or not _is_finite_number(x_curr):
+        return {
+            "converged": False,
+            "root": x1,
+            "iterations": 0,
+            "rows": rows,
+            "stop_reason": "Stopped: non-finite initial guesses.",
+            "residual": float("inf"),
+            "warnings": ["Initial guesses are not finite (NaN/Inf)."],
+        }
 
     for n in range(max_iter):
-        f_prev = f(x_prev)
-        f_curr = f(x_curr)
+        try:
+            f_prev = f(x_prev)
+            f_curr = f(x_curr)
+        except Exception as exc:
+            stop_reason = "Stopped: function evaluation error."
+            warnings.append(f"Evaluation error at iteration {n}: {exc.__class__.__name__}: {exc}")
+            iterations_used = n
+            break
+
+        if not _is_finite_number(f_prev) or not _is_finite_number(f_curr):
+            stop_reason = "Stopped: non-finite function value encountered."
+            warnings.append(f"Non-finite value at iteration {n} (f(x_n)={f_curr}, f(x_(n-1))={f_prev}).")
+            iterations_used = n
+            break
 
         denom = f_curr - f_prev
         if abs(denom) < denom_eps:
             stop_reason = f"Stopped: denominator too small (|f(x_n) - f(x_(n-1))| < {denom_eps})."
+            warnings.append("Denominator near zero; secant step would be unstable.")
             iterations_used = n
             break
 
         x_next = x_curr - f_curr * (x_curr - x_prev) / denom
         dx = abs(x_next - x_curr)
+
+        if not _is_finite_number(x_next) or not _is_finite_number(dx):
+            stop_reason = "Stopped: non-finite iteration step encountered."
+            warnings.append(f"Unstable update at iteration {n}; x_(n+1) became {x_next}.")
+            iterations_used = n
+            break
 
         rows.append({
             "n": n,
@@ -202,8 +278,16 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
 
     if not converged and stop_reason == "":
         stop_reason = "Not converged: reached maximum iterations."
+        warnings.append("Maximum iterations reached before tolerance was satisfied.")
 
-    residual = abs(f(x_curr))
+    try:
+        residual_raw = f(x_curr)
+        residual = abs(residual_raw) if _is_finite_number(residual_raw) else float("inf")
+        if not _is_finite_number(residual_raw):
+            warnings.append("Residual is non-finite at final estimate.")
+    except Exception as exc:
+        residual = float("inf")
+        warnings.append(f"Residual evaluation failed: {exc.__class__.__name__}: {exc}")
 
     return {
         "converged": converged,
@@ -212,6 +296,7 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
         "rows": rows,
         "stop_reason": stop_reason,
         "residual": residual,
+        "warnings": warnings,
     }
 
 
@@ -355,6 +440,15 @@ def validate_inputs(x0_raw, tol_raw, max_iter_raw, method="Newton-Raphson", x1_r
             x1 = float(x1_str)
         except ValueError:
             return (False, None, "Second Guess (x₁) must be a valid number.")
+
+    if not math.isfinite(x0):
+        return (False, None, "Initial Guess (x₀) must be finite (not NaN or Infinity).")
+
+    if x1 is not None and not math.isfinite(x1):
+        return (False, None, "Second Guess (x₁) must be finite (not NaN or Infinity).")
+
+    if not math.isfinite(tol):
+        return (False, None, "Tolerance must be finite (not NaN or Infinity).")
 
     if tol <= 0:
         return (False, None, "Tolerance must be greater than 0.")

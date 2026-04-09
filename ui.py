@@ -711,11 +711,24 @@ class RootSyncApp:
         tol = data["tol"]
         max_iter = data["max_iter"]
         x1 = data.get("x1")
-        
-        if method_name == "Secant Method":
-            result = secant_method(f, x0, x1, tol, max_iter)
-        else:
-            result = newton_raphson(f, df, x0, tol, max_iter)
+
+        try:
+            if method_name == "Secant Method":
+                result = secant_method(f, x0, x1, tol, max_iter)
+            else:
+                result = newton_raphson(f, df, x0, tol, max_iter)
+        except Exception as exc:
+            # Last-resort protection so UI never crashes due to solver errors.
+            fallback_root = x1 if method_name == "Secant Method" and x1 is not None else x0
+            result = {
+                "converged": False,
+                "root": fallback_root,
+                "iterations": 0,
+                "rows": [],
+                "stop_reason": "Stopped: unexpected runtime error.",
+                "residual": float("inf"),
+                "warnings": [f"Unexpected solver exception: {exc.__class__.__name__}: {exc}"],
+            }
         
         # Build solution trail
         self.build_solution_trail(func_name, method_name, x0, x1, tol, max_iter, result)
@@ -725,7 +738,13 @@ class RootSyncApp:
         
         # Plot graph
         if MATPLOTLIB_OK:
-            self.plot_function(func_name, f, result, x0, method_name, x1)
+            try:
+                self.plot_function(func_name, f, result, x0, method_name, x1)
+            except Exception as exc:
+                self.insert_section("WARNINGS")
+                self.trail_insert("\n", "normal")
+                self.trail_insert(f"  ! Graph warning: {exc.__class__.__name__}: {exc}\n", "warning")
+                self.trail_insert("\n", "normal")
             
         # Stop loading
         self.stop_loading()
@@ -778,6 +797,11 @@ class RootSyncApp:
         self.trail_insert("  ───────────────────────────────────────────────\n", "divider")
         self.trail_insert(f"  {reason_text}\n", reason_tag)
         self.trail_insert("\n", "normal")
+
+        # ═══════════════════════════════════════════════════════════════════
+        # WARNINGS section - Explicit edge-case logs for robustness output
+        # ═══════════════════════════════════════════════════════════════════
+        self.insert_warnings_section(result)
         
         # ═══════════════════════════════════════════════════════════════════
         # STEPS section - Real iteration table with all numeric values
@@ -901,11 +925,29 @@ class RootSyncApp:
         self.trail_insert(f"  {title}\n", "section")
         self.trail_insert(f"{'═' * 52}\n", "divider")
 
+    def insert_warnings_section(self, result):
+        """Insert warning logs in a dedicated section for edge-case visibility."""
+        warnings = result.get("warnings", []) or []
+        if not warnings:
+            return
+
+        self.insert_section("WARNINGS")
+        self.trail_insert("\n", "normal")
+        for idx, warning_msg in enumerate(warnings, start=1):
+            self.trail_insert(f"  {idx}. {warning_msg}\n", "warning")
+        self.trail_insert("\n", "normal")
+
     def get_stop_reason_display(self, result, method_name):
         """Map solver stop reason to a clear, documented message and tag"""
         stop_reason = result.get("stop_reason", "").lower()
         if result.get("converged"):
             return ("Tolerance condition satisfied: |Δx| < ε", "success")
+        if "non-finite" in stop_reason:
+            return ("Computation produced NaN/Inf, stopped safely", "warning")
+        if "evaluation error" in stop_reason:
+            return ("Function evaluation failed, stopped safely", "warning")
+        if "runtime error" in stop_reason:
+            return ("Unexpected runtime issue caught, no crash occurred", "warning")
         if "derivative" in stop_reason:
             return ("Derivative too small, computation stopped safely", "warning")
         if "denominator" in stop_reason and method_name == "Secant Method":
@@ -925,9 +967,15 @@ class RootSyncApp:
         """Update status panel with results"""
         self.root_var.set(f"x ≈ {result['root']:.6f}")
         self.iterations_var.set(str(result['iterations']))
-        
-        if result['converged']:
+
+        has_warnings = bool(result.get("warnings"))
+
+        if result['converged'] and not has_warnings:
             self.set_badge("Converged", "success")
+        elif result['converged'] and has_warnings:
+            self.set_badge("Converged (Warnings)", "warning")
+        elif has_warnings:
+            self.set_badge("Warning", "warning")
         else:
             self.set_badge("Not Converged", "warning")
             

@@ -31,6 +31,14 @@ except Exception:
 
 class RootSyncApp:
     """Modern engineering dashboard for Newton-Raphson root finding"""
+
+    APP_NAME = "RootSync"
+    APP_VERSION = "v1.0"
+    TEAM_MEMBERS = [
+        "Ayco, Marrion",
+        "Bayang, Zurich Bryan",
+        "Nacionales, Wyn Francis",
+    ]
     
     def __init__(self, root):
         self.root = root
@@ -43,10 +51,11 @@ class RootSyncApp:
         
     def setup_window(self):
         """Configure main window"""
-        self.root.title("RootSync")
+        self.root.title(f"{self.APP_NAME} {self.APP_VERSION}")
         self.root.geometry(f"{DIMENSIONS['window_width']}x{DIMENSIONS['window_height']}")
         self.root.minsize(DIMENSIONS['window_min_width'], DIMENSIONS['window_min_height'])
         self.root.configure(bg=COLORS['bg_primary'])
+        self.root.bind("<F1>", lambda event: self.show_about_help())
         
         # Center window on screen
         self.root.update_idletasks()
@@ -102,7 +111,7 @@ class RootSyncApp:
         
         title = tk.Label(
             title_frame,
-            text="RootSync",
+            text=self.APP_NAME,
             font=FONTS['title'],
             bg=COLORS['bg_header'],
             fg=COLORS['text_inverse']
@@ -132,10 +141,28 @@ class RootSyncApp:
         # Version badge on right
         version_frame = tk.Frame(header_inner, bg=COLORS['bg_header'])
         version_frame.pack(side='right')
+
+        help_btn = tk.Button(
+            version_frame,
+            text="About / Help",
+            font=FONTS['button'],
+            bg=COLORS['bg_header'],
+            fg=COLORS['text_inverse'],
+            activebackground=COLORS['bg_header'],
+            activeforeground=COLORS['accent_secondary'],
+            relief='solid',
+            borderwidth=1,
+            highlightthickness=0,
+            cursor='hand2',
+            padx=10,
+            pady=2,
+            command=self.show_about_help
+        )
+        help_btn.pack(side='left', padx=(0, DIMENSIONS['pad_md']))
         
         version = tk.Label(
             version_frame,
-            text="v2.0",
+            text=self.APP_VERSION,
             font=FONTS['small'],
             bg=COLORS['accent_primary'],
             fg=COLORS['text_inverse'],
@@ -1158,3 +1185,107 @@ class RootSyncApp:
                 self.iter_entry.insert(0, str(tc['max_iter']))
                 
                 break
+
+    def show_about_help(self):
+        """Open a compact About/Help window for screenshots and quick reference"""
+        if getattr(self, "about_window", None) and self.about_window.winfo_exists():
+            self.about_window.lift()
+            self.about_window.focus_force()
+            return
+
+        window = tk.Toplevel(self.root)
+        self.about_window = window
+        window.title(f"About / Help - {self.APP_NAME}")
+        window.configure(bg=COLORS['bg_primary'])
+        window.resizable(False, False)
+        window.transient(self.root)
+        window.grab_set()
+
+        width = 640
+        height = 520
+        x = self.root.winfo_x() + (self.root.winfo_width() - width) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - height) // 2
+        window.geometry(f"{width}x{height}+{x}+{y}")
+
+        outer = tk.Frame(window, bg=COLORS['bg_primary'])
+        outer.pack(fill='both', expand=True, padx=20, pady=20)
+
+        header = tk.Frame(outer, bg=COLORS['bg_header'])
+        header.pack(fill='x')
+
+        tk.Label(
+            header,
+            text=self.APP_NAME,
+            font=FONTS['title'],
+            bg=COLORS['bg_header'],
+            fg=COLORS['text_inverse']
+        ).pack(anchor='w', padx=16, pady=(14, 2))
+
+        tk.Label(
+            header,
+            text=f"Newton-Raphson / Secant Visual Root Finder  •  {self.APP_VERSION}",
+            font=FONTS['subtitle'],
+            bg=COLORS['bg_header'],
+            fg=COLORS['text_muted']
+        ).pack(anchor='w', padx=16, pady=(0, 14))
+
+        card = tk.Frame(outer, bg=COLORS['bg_secondary'], highlightbackground=COLORS['border_light'], highlightthickness=1)
+        card.pack(fill='both', expand=True, pady=(16, 0))
+
+        card_inner = tk.Frame(card, bg=COLORS['bg_secondary'])
+        card_inner.pack(fill='both', expand=True, padx=16, pady=16)
+
+        sections = [
+            ("Project Name", self.APP_NAME),
+            ("Version", self.APP_VERSION),
+            ("Members", "\n".join(f"- {member}" for member in self.TEAM_MEMBERS)),
+            ("How to Use", "1. Choose Newton-Raphson or Secant Method.\n2. Select a function and enter the guesses.\n3. Click Calculate.\n4. Review the trail, graph, and final answer."),
+        ]
+
+        for title, body in sections:
+            section_frame = tk.Frame(card_inner, bg=COLORS['bg_secondary'])
+            section_frame.pack(fill='x', anchor='w', pady=(0, 12))
+
+            tk.Label(
+                section_frame,
+                text=title,
+                font=FONTS['section_header'],
+                bg=COLORS['bg_secondary'],
+                fg=COLORS['accent_primary']
+            ).pack(anchor='w')
+
+            tk.Label(
+                section_frame,
+                text=body,
+                font=FONTS['body'],
+                bg=COLORS['bg_secondary'],
+                fg=COLORS['text_primary'],
+                justify='left',
+                wraplength=580
+            ).pack(anchor='w', pady=(2, 0))
+
+        footer = tk.Frame(outer, bg=COLORS['bg_primary'])
+        footer.pack(fill='x', pady=(12, 0))
+
+        tk.Label(
+            footer,
+            text="Press F1 anywhere in the app to reopen this panel.",
+            font=FONTS['small'],
+            bg=COLORS['bg_primary'],
+            fg=COLORS['text_muted']
+        ).pack(side='left')
+
+        tk.Button(
+            footer,
+            text="Close",
+            font=FONTS['button'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_primary'],
+            activebackground=COLORS['border_medium'],
+            activeforeground=COLORS['text_primary'],
+            relief='flat',
+            cursor='hand2',
+            padx=14,
+            pady=6,
+            command=window.destroy
+        ).pack(side='right')

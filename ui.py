@@ -5,6 +5,7 @@ Engineering dashboard interface for Newton-Raphson root finder
 
 import sys
 import platform
+import math
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
@@ -731,7 +732,7 @@ class RootSyncApp:
             }
         
         # Build solution trail
-        self.build_solution_trail(func_name, method_name, x0, x1, tol, max_iter, result)
+        self.build_solution_trail(func_name, f, method_name, x0, x1, tol, max_iter, result)
         
         # Update status panel
         self.update_status(result)
@@ -749,7 +750,7 @@ class RootSyncApp:
         # Stop loading
         self.stop_loading()
         
-    def build_solution_trail(self, func_name, method_name, x0, x1, tol, max_iter, result):
+    def build_solution_trail(self, func_name, f, method_name, x0, x1, tol, max_iter, result):
         """Build the formatted solution trail with clear sections and real iteration data"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pyver = sys.version.split()[0]
@@ -885,27 +886,7 @@ class RootSyncApp:
         # ═══════════════════════════════════════════════════════════════════
         # VERIFICATION section
         # ═══════════════════════════════════════════════════════════════════
-        self.insert_section("VERIFICATION")
-        self.trail_insert("\n", "normal")
-        
-        residual = result['residual']
-        self.trail_insert(f"  Residual Check: |f(x)| = {residual:.10e}\n", "normal")
-        self.trail_insert(f"  Tolerance:      ε = {tol}\n", "normal")
-        self.trail_insert("\n", "normal")
-        
-        if converged and residual < tol * 10:
-            self.trail_insert("  ✓ CONCLUSION: Solution is VALID within tolerance.\n", "success")
-            self.trail_insert(f"    The root x ≈ {root_est:.8f} satisfies f(x) ≈ 0.\n", "muted")
-        elif converged:
-            self.trail_insert("  ✓ CONCLUSION: Converged, residual slightly above tolerance.\n", "success")
-            self.trail_insert(f"    The root x ≈ {root_est:.8f} is a good approximation.\n", "muted")
-        else:
-            self.trail_insert("  ✗ CONCLUSION: NOT within tolerance.\n", "warning")
-            self.trail_insert("    Consider: (1) Different initial guess, or\n", "muted")
-            self.trail_insert("              (2) Increase max iterations, or\n", "muted")
-            self.trail_insert("              (3) Loosen tolerance.\n", "muted")
-            
-        self.trail_insert("\n", "normal")
+        self.insert_verification_section(func_name, f, root_est, tol, converged, result)
         
         # ═══════════════════════════════════════════════════════════════════
         # SUMMARY section
@@ -935,6 +916,83 @@ class RootSyncApp:
         self.trail_insert("\n", "normal")
         for idx, warning_msg in enumerate(warnings, start=1):
             self.trail_insert(f"  {idx}. {warning_msg}\n", "warning")
+        self.trail_insert("\n", "normal")
+
+    def format_finite(self, value, fmt=".10e"):
+        """Format finite numbers, otherwise return INVALID marker."""
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return format(value, fmt)
+        return "INVALID"
+
+    def insert_verification_section(self, func_name, f, root_est, tol, converged, result):
+        """Insert a structured verification block for auditability."""
+        self.insert_section("VERIFICATION")
+        self.trail_insert("\n", "normal")
+
+        root_is_finite = isinstance(root_est, (int, float)) and math.isfinite(root_est)
+        residual = result.get("residual")
+
+        residual_from_solver_is_finite = (
+            isinstance(residual, (int, float)) and math.isfinite(residual)
+        )
+
+        fx_at_root = None
+        fx_eval_error = None
+        if root_is_finite:
+            try:
+                fx_at_root = f(root_est)
+            except Exception as exc:
+                fx_eval_error = f"{exc.__class__.__name__}: {exc}"
+
+        fx_is_finite = isinstance(fx_at_root, (int, float)) and math.isfinite(fx_at_root)
+        computed_residual = abs(fx_at_root) if fx_is_finite else None
+
+        # Prefer direct substitution result when available; otherwise use solver residual.
+        if computed_residual is not None:
+            verification_residual = computed_residual
+        elif residual_from_solver_is_finite:
+            verification_residual = residual
+        else:
+            verification_residual = None
+
+        verification_valid = root_is_finite and (verification_residual is not None)
+        verification_pass = bool(verification_valid and (verification_residual < tol))
+
+        self.trail_insert(f"  Computed Root: x ≈ {self.format_finite(root_est, '.8f')}\n", "normal")
+        self.trail_insert("\n", "normal")
+        self.trail_insert("  Substitute root into f(x)\n", "subheader")
+        self.trail_insert("\n", "normal")
+
+        fx_display = self.format_finite(fx_at_root, ".10e") if fx_is_finite else "INVALID"
+        self.trail_insert(f"  f(root) = f({self.format_finite(root_est, '.8f')}) = {fx_display}\n", "normal")
+        self.trail_insert("\n", "normal")
+        self.trail_insert("  Residual:\n", "subheader")
+        self.trail_insert(
+            f"  |f(x)| = {self.format_finite(verification_residual, '.10e') if verification_residual is not None else 'INVALID'}\n",
+            "normal"
+        )
+        self.trail_insert("\n", "normal")
+        self.trail_insert("  Verification Result:\n", "subheader")
+
+        if verification_pass:
+            self.trail_insert("  Verification Result: PASS - residual is within tolerance\n", "success")
+            self.trail_insert(f"  Rule check: |f(x)| < ε  ({verification_residual:.10e} < {tol:.10e})\n", "muted")
+        elif verification_valid:
+            self.trail_insert("  Verification Result: FAIL - residual exceeded tolerance\n", "warning")
+            self.trail_insert(f"  Rule check: |f(x)| < ε  ({verification_residual:.10e} >= {tol:.10e})\n", "muted")
+        else:
+            self.trail_insert("  Verification Result: FAILED / INVALID\n", "warning")
+            if not root_is_finite:
+                self.trail_insert("  Reason: computed root is non-finite (NaN/Inf).\n", "muted")
+            elif fx_eval_error:
+                self.trail_insert(f"  Reason: substitution failed ({fx_eval_error}).\n", "muted")
+            else:
+                self.trail_insert("  Reason: residual could not be evaluated safely.\n", "muted")
+
+        if converged and not verification_pass:
+            self.trail_insert("\n", "normal")
+            self.trail_insert("  Note: Iteration converged, but verification did not pass strict tolerance audit.\n", "warning")
+
         self.trail_insert("\n", "normal")
 
     def get_stop_reason_display(self, result, method_name):

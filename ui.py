@@ -87,6 +87,8 @@ class RootSyncApp:
         # Main container
         self.main_container = tk.Frame(self.root, bg=COLORS['bg_primary'])
         self.main_container.pack(fill='both', expand=True)
+        self.main_container.columnconfigure(0, weight=1)
+        self.main_container.rowconfigure(3, weight=1)
         
         # Create sections
         self.create_header()
@@ -99,7 +101,13 @@ class RootSyncApp:
     # =========================================================================
     def create_header(self):
         """Create the dark header bar"""
-        header = tk.Frame(self.main_container, bg=COLORS['bg_header'], height=DIMENSIONS['header_height'])
+        header = tk.Frame(
+            self.main_container,
+            bg=COLORS['bg_header'],
+            height=DIMENSIONS['header_height'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+        )
         header.pack(fill='x', side='top')
         header.pack_propagate(False)
         
@@ -116,7 +124,7 @@ class RootSyncApp:
             text=self.APP_NAME,
             font=FONTS['title'],
             bg=COLORS['bg_header'],
-            fg=COLORS['text_inverse']
+            fg=COLORS['text_primary']
         )
         title.pack(side='left')
         
@@ -136,7 +144,7 @@ class RootSyncApp:
             text="Newton-Raphson Visual Root Finder",
             font=FONTS['subtitle'],
             bg=COLORS['bg_header'],
-            fg=COLORS['text_muted']
+            fg=COLORS['text_secondary']
         )
         subtitle.pack(side='left', padx=(DIMENSIONS['pad_lg'], 0))
         
@@ -148,10 +156,10 @@ class RootSyncApp:
             version_frame,
             text="About / Help",
             font=FONTS['button'],
-            bg=COLORS['bg_header'],
-            fg=COLORS['text_inverse'],
-            activebackground=COLORS['bg_header'],
-            activeforeground=COLORS['accent_secondary'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_primary'],
+            activebackground=COLORS['accent_light'],
+            activeforeground=COLORS['text_primary'],
             relief='solid',
             borderwidth=1,
             highlightthickness=0,
@@ -181,138 +189,25 @@ class RootSyncApp:
         control_container = tk.Frame(self.main_container, bg=COLORS['bg_primary'])
         control_container.pack(fill='x', padx=DIMENSIONS['pad_xl'], pady=(DIMENSIONS['pad_lg'], 0))
         
-        control_panel = tk.Frame(control_container, bg=COLORS['bg_control'])
+        control_panel = tk.Frame(
+            control_container,
+            bg=COLORS['bg_secondary'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+        )
         control_panel.pack(fill='x')
         
-        # Inner content with padding
-        control_inner = tk.Frame(control_panel, bg=COLORS['bg_control'])
+        control_inner = tk.Frame(control_panel, bg=COLORS['bg_secondary'])
         control_inner.pack(fill='x', padx=DIMENSIONS['pad_lg'], pady=DIMENSIONS['pad_md'])
+        control_inner.columnconfigure(0, weight=1)
+        control_inner.columnconfigure(1, weight=0)
 
-        # Left group: holds inputs and will expand/shrink, keeping buttons visible on the right
-        inner_left = tk.Frame(control_inner, bg=COLORS['bg_control'])
-        # Use grid so we can reserve a fixed column for the buttons on the right
-        inner_left.grid(row=0, column=0, sticky='ew')
-        control_inner.grid_columnconfigure(0, weight=1)
-        
-        # Method selector
-        method_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        method_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
+        inputs_frame = tk.Frame(control_inner, bg=COLORS['bg_secondary'])
+        inputs_frame.grid(row=0, column=0, sticky='ew')
+        for index in range(7):
+            inputs_frame.columnconfigure(index, weight=1, uniform='input_cols')
 
-        tk.Label(
-            method_frame,
-            text="Method",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-
-        self.method_menu = ttk.OptionMenu(
-            method_frame,
-            self.method_var,
-            self.method_var.get(),
-            "Newton-Raphson",
-            "Secant Method"
-        )
-        self.method_menu.config(width=18)
-        self.method_menu.pack(anchor='w', pady=(2, 0))
-
-        # Function selector
-        func_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        func_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
-
-        tk.Label(
-            func_frame,
-            text="Function",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-
-        self.func_menu = ttk.OptionMenu(
-            func_frame,
-            self.func_var,
-            self.func_var.get(),
-            *FUNCTIONS.keys()
-        )
-        self.func_menu.config(width=20)
-        self.func_menu.pack(anchor='w', pady=(2, 0))
-        
-        # Initial guess (x0)
-        x0_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        x0_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
-        
-        tk.Label(
-            x0_frame,
-            text="Initial Guess (x₀)",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-        
-        self.x0_entry = ttk.Entry(x0_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
-        self.x0_entry.pack(anchor='w', pady=(2, 0))
-        self.x0_entry.insert(0, "1.5")
-
-        # Second guess (x1) for Secant Method
-        x1_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        x1_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
-
-        tk.Label(
-            x1_frame,
-            text="Second Guess (x₁)",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-
-        self.x1_entry = ttk.Entry(x1_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
-        self.x1_entry.pack(anchor='w', pady=(2, 0))
-        self.x1_entry.insert(0, "2.0")
-        
-        # Tolerance
-        tol_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        tol_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
-        
-        tk.Label(
-            tol_frame,
-            text="Tolerance (ε)",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-        
-        self.tol_entry = ttk.Entry(tol_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
-        self.tol_entry.pack(anchor='w', pady=(2, 0))
-        self.tol_entry.insert(0, "0.0001")
-        
-        # Max iterations
-        iter_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        iter_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
-        
-        tk.Label(
-            iter_frame,
-            text="Max Iterations",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-        
-        self.iter_entry = ttk.Entry(iter_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
-        self.iter_entry.pack(anchor='w', pady=(2, 0))
-        self.iter_entry.insert(0, "20")
-        
-        # Test Case selector (for quick loading of documented test cases)
-        test_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
-        test_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
-        
-        tk.Label(
-            test_frame,
-            text="Load Test Case",
-            font=FONTS['small'],
-            bg=COLORS['bg_control'],
-            fg=COLORS['text_secondary']
-        ).pack(anchor='w')
-        
+        test_frame = self.create_input_group(inputs_frame, 0, "Load Test Case")
         test_case_names = ["Select..."] + [tc['name'] for tc in TEST_CASES]
         self.test_menu = ttk.OptionMenu(
             test_frame,
@@ -322,48 +217,87 @@ class RootSyncApp:
             command=self.load_test_case
         )
         self.test_menu.config(width=14)
-        self.test_menu.pack(anchor='w', pady=(2, 0))
-        
-        # Buttons frame (right side) - placed in a fixed grid column so it remains visible
-        buttons_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
-        buttons_frame.grid(row=0, column=1, sticky='e')
-        
-        # Clear button
+        self.test_menu.pack(fill='x', pady=(2, 0))
+
+        method_frame = self.create_input_group(inputs_frame, 1, "Method")
+        self.method_menu = ttk.OptionMenu(
+            method_frame,
+            self.method_var,
+            self.method_var.get(),
+            "Newton-Raphson",
+            "Secant Method"
+        )
+        self.method_menu.config(width=18)
+        self.method_menu.pack(fill='x', pady=(2, 0))
+
+        func_frame = self.create_input_group(inputs_frame, 2, "Function")
+        self.func_menu = ttk.OptionMenu(
+            func_frame,
+            self.func_var,
+            self.func_var.get(),
+            *FUNCTIONS.keys()
+        )
+        self.func_menu.config(width=20)
+        self.func_menu.pack(fill='x', pady=(2, 0))
+
+        x0_frame = self.create_input_group(inputs_frame, 3, "Initial Guess (x₀)")
+        self.x0_entry = ttk.Entry(x0_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
+        self.x0_entry.pack(fill='x', pady=(2, 0))
+        self.x0_entry.insert(0, "1.5")
+
+        x1_frame = self.create_input_group(inputs_frame, 4, "Second Guess (x₁)")
+        self.x1_entry = ttk.Entry(x1_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
+        self.x1_entry.pack(fill='x', pady=(2, 0))
+        self.x1_entry.insert(0, "2.0")
+
+        tol_frame = self.create_input_group(inputs_frame, 5, "Tolerance (ε)")
+        self.tol_entry = ttk.Entry(tol_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
+        self.tol_entry.pack(fill='x', pady=(2, 0))
+        self.tol_entry.insert(0, "0.0001")
+
+        iter_frame = self.create_input_group(inputs_frame, 6, "Max Iterations")
+        self.iter_entry = ttk.Entry(iter_frame, width=DIMENSIONS['entry_width'], font=FONTS['entry'])
+        self.iter_entry.pack(fill='x', pady=(2, 0))
+        self.iter_entry.insert(0, "20")
+
+        buttons_frame = tk.Frame(control_inner, bg=COLORS['bg_secondary'])
+        buttons_frame.grid(row=0, column=1, sticky='e', padx=(DIMENSIONS['pad_lg'], 0))
+
+        button_common = {
+            'font': FONTS['button_primary'],
+            'relief': 'flat',
+            'cursor': 'hand2',
+            'padx': 16,
+            'pady': 8,
+            'width': 14,
+        }
+
         self.clear_btn = tk.Button(
             buttons_frame,
             text="Clear",
-            font=FONTS['button'],
             bg=COLORS['bg_secondary'],
             fg=COLORS['text_primary'],
-            activebackground=COLORS['border_medium'],
+            activebackground=COLORS['accent_light'],
             activeforeground=COLORS['text_primary'],
-            relief='flat',
-            cursor='hand2',
-            padx=16,
-            pady=6,
-            command=self.clear
+            command=self.clear,
+            **button_common
         )
-        self.clear_btn.pack(side='left', padx=(0, DIMENSIONS['pad_sm']))
-        self.bind_hover_effect(self.clear_btn, COLORS['border_light'], COLORS['bg_secondary'])
-        # Export Report button
+        self.clear_btn.grid(row=0, column=0, padx=(0, DIMENSIONS['pad_sm']))
+        self.bind_hover_effect(self.clear_btn, COLORS['accent_light'], COLORS['bg_secondary'])
+
         self.export_btn = tk.Button(
             buttons_frame,
             text="Export Report",
-            font=FONTS['button'],
             bg=COLORS['bg_secondary'],
             fg=COLORS['text_primary'],
-            activebackground=COLORS['border_medium'],
+            activebackground=COLORS['accent_light'],
             activeforeground=COLORS['text_primary'],
-            relief='flat',
-            cursor='hand2',
-            padx=14,
-            pady=6,
-            command=self.export_report
+            command=self.export_report,
+            **button_common
         )
-        self.export_btn.pack(side='left', padx=(0, DIMENSIONS['pad_sm']))
-        self.bind_hover_effect(self.export_btn, COLORS['border_light'], COLORS['bg_secondary'])
+        self.export_btn.grid(row=0, column=1, padx=(0, DIMENSIONS['pad_sm']))
+        self.bind_hover_effect(self.export_btn, COLORS['accent_light'], COLORS['bg_secondary'])
 
-        # Calculate button
         self.calc_btn = tk.Button(
             buttons_frame,
             text="Calculate",
@@ -374,12 +308,26 @@ class RootSyncApp:
             activeforeground=COLORS['text_inverse'],
             relief='flat',
             cursor='hand2',
-            padx=20,
-            pady=6,
+            padx=16,
+            pady=8,
+            width=14,
             command=self.compute
         )
-        self.calc_btn.pack(side='left')
+        self.calc_btn.grid(row=0, column=2)
         self.bind_hover_effect(self.calc_btn, COLORS['accent_hover'], COLORS['accent_primary'])
+
+    def create_input_group(self, parent, column, label_text):
+        """Create a vertically stacked label and field container."""
+        frame = tk.Frame(parent, bg=COLORS['bg_secondary'])
+        frame.grid(row=0, column=column, sticky='ew', padx=(0, DIMENSIONS['pad_lg']))
+        tk.Label(
+            frame,
+            text=label_text,
+            font=FONTS['small'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_secondary']
+        ).pack(anchor='w')
+        return frame
         
     def bind_hover_effect(self, widget, hover_color, normal_color):
         """Bind hover effects to a widget"""
@@ -394,16 +342,22 @@ class RootSyncApp:
         status_container = tk.Frame(self.main_container, bg=COLORS['bg_primary'])
         status_container.pack(fill='x', padx=DIMENSIONS['pad_xl'], pady=DIMENSIONS['pad_md'])
         
-        status_panel = tk.Frame(status_container, bg=COLORS['bg_secondary'])
+        status_panel = tk.Frame(
+            status_container,
+            bg=COLORS['bg_secondary'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+        )
         status_panel.pack(fill='x')
         
         # Inner content
         status_inner = tk.Frame(status_panel, bg=COLORS['bg_secondary'])
         status_inner.pack(fill='x', padx=DIMENSIONS['pad_lg'], pady=DIMENSIONS['pad_md'])
+        status_inner.columnconfigure(0, weight=1)
         
         # Root value
         root_frame = tk.Frame(status_inner, bg=COLORS['bg_secondary'])
-        root_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl'] * 2))
+        root_frame.grid(row=0, column=0, sticky='w', padx=(0, DIMENSIONS['pad_xl']))
         
         tk.Label(
             root_frame,
@@ -424,7 +378,7 @@ class RootSyncApp:
         
         # Iterations
         iter_frame = tk.Frame(status_inner, bg=COLORS['bg_secondary'])
-        iter_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl'] * 2))
+        iter_frame.grid(row=0, column=1, sticky='w', padx=(0, DIMENSIONS['pad_xl']))
         
         tk.Label(
             iter_frame,
@@ -445,7 +399,7 @@ class RootSyncApp:
         
         # Convergence status
         conv_frame = tk.Frame(status_inner, bg=COLORS['bg_secondary'])
-        conv_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl'] * 2))
+        conv_frame.grid(row=0, column=2, sticky='w', padx=(0, DIMENSIONS['pad_xl']))
         
         tk.Label(
             conv_frame,
@@ -471,7 +425,7 @@ class RootSyncApp:
         
         # Loading indicator (hidden by default)
         self.loading_frame = tk.Frame(status_inner, bg=COLORS['bg_secondary'])
-        self.loading_frame.pack(side='right')
+        self.loading_frame.grid(row=0, column=3, sticky='e')
         
         self.loading_label = tk.Label(
             self.loading_frame,
@@ -511,7 +465,12 @@ class RootSyncApp:
         
     def create_graph_panel(self, parent):
         """Create the graph panel"""
-        graph_outer = tk.Frame(parent, bg=COLORS['bg_secondary'])
+        graph_outer = tk.Frame(
+            parent,
+            bg=COLORS['bg_secondary'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+        )
         graph_outer.grid(row=0, column=0, sticky='nsew', padx=(0, DIMENSIONS['pad_md']))
         
         # Header
@@ -559,7 +518,12 @@ class RootSyncApp:
             
     def create_trail_panel(self, parent):
         """Create the solution trail panel"""
-        trail_outer = tk.Frame(parent, bg=COLORS['bg_secondary'])
+        trail_outer = tk.Frame(
+            parent,
+            bg=COLORS['bg_secondary'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+        )
         trail_outer.grid(row=0, column=1, sticky='nsew')
         
         # Header
@@ -589,9 +553,9 @@ class RootSyncApp:
             relief='flat',
             padx=12,
             pady=12,
-            spacing1=2,
-            spacing2=1,
-            spacing3=2,
+            spacing1=6,
+            spacing2=2,
+            spacing3=6,
             state='disabled',  # Read-only by default
             cursor='arrow'     # Normal cursor instead of text cursor
         )
@@ -632,8 +596,8 @@ class RootSyncApp:
         self.trail.tag_configure("section", 
             font=FONTS['section_header'],
             foreground=COLORS['accent_primary'],
-            spacing1=12,
-            spacing3=4
+            spacing1=16,
+            spacing3=8
         )
         
         # Sub-headers
@@ -784,13 +748,13 @@ class RootSyncApp:
         # ═══════════════════════════════════════════════════════════════════
         self.insert_section("GIVEN")
         self.trail_insert("\n", "normal")
-        self.trail_insert(f"  Method:          {method_name}\n", "normal")
-        self.trail_insert(f"  Function:        {func_name}\n", "normal")
-        self.trail_insert(f"  Initial Guess:   x₀ = {x0:.6f}\n", "normal")
+        self.trail_insert(f"  Method:         {method_name}\n", "normal")
+        self.trail_insert(f"  Function:       {func_name}\n", "normal")
+        self.trail_insert(f"  Initial Guess:  x₀ = {x0:.6f}\n", "normal")
         if method_name == "Secant Method" and x1 is not None:
-            self.trail_insert(f"  Second Guess:    x₁ = {x1:.6f}\n", "normal")
-        self.trail_insert(f"  Tolerance:       ε = {tol}\n", "normal")
-        self.trail_insert(f"  Max Iterations:  {max_iter}\n", "normal")
+            self.trail_insert(f"  Second Guess:   x₁ = {x1:.6f}\n", "normal")
+        self.trail_insert(f"  Tolerance:      ε = {tol}\n", "normal")
+        self.trail_insert(f"  Max Iterations: {max_iter}\n", "normal")
         self.trail_insert("\n", "normal")
         
         # ═══════════════════════════════════════════════════════════════════
@@ -801,15 +765,15 @@ class RootSyncApp:
         if method_name == "Secant Method":
             self.trail_insert("  Secant Method\n", "subheader")
             self.trail_insert("\n", "normal")
-            self.trail_insert("  Formula:    x_{n+1} = x_n - f(x_n)(x_n - x_{n-1}) / (f(x_n) - f(x_{n-1}))\n", "muted")
-            self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
-            self.trail_insert("  Safety:     Stop if denominator is too small (|f(x_n) - f(x_{n-1})| < 1e-12)\n", "muted")
+            self.trail_insert("  Formula:   x_{n+1} = x_n - f(x_n)(x_n - x_{n-1}) / (f(x_n) - f(x_{n-1}))\n", "muted")
+            self.trail_insert("  Stop when: |Δx| < ε  OR  n ≥ max iterations\n", "muted")
+            self.trail_insert("  Safety:    Stop if denominator is too small (|f(x_n) - f(x_{n-1})| < 1e-12)\n", "muted")
         else:
             self.trail_insert("  Newton-Raphson Iteration\n", "subheader")
             self.trail_insert("\n", "normal")
-            self.trail_insert("  Formula:    x_{n+1} = x_n - f(x_n) / f'(x_n)\n", "muted")
-            self.trail_insert("  Stop when:  |Δx| < ε  OR  n ≥ max iterations\n", "muted")
-            self.trail_insert("  Safety:     Stop if |f'(x)| < 1e-12 (derivative too small)\n", "muted")
+            self.trail_insert("  Formula:   x_{n+1} = x_n - f(x_n) / f'(x_n)\n", "muted")
+            self.trail_insert("  Stop when: |Δx| < ε  OR  n ≥ max iterations\n", "muted")
+            self.trail_insert("  Safety:    Stop if |f'(x)| < 1e-12 (derivative too small)\n", "muted")
         self.trail_insert("\n", "normal")
 
         # ═══════════════════════════════════════════════════════════════════
@@ -839,25 +803,25 @@ class RootSyncApp:
             self.trail_insert("  (Check if derivative/denominator is too small at initial guesses)\n", "muted")
         else:
             if method_name == "Secant Method":
-                header = "  n │    x_(n-1)     │      x_n       │   f(x_(n-1))   │    f(x_n)      │    x_{n+1}     │     |Δx|     \n"
-                divider = " ───┼────────────────┼────────────────┼────────────────┼────────────────┼────────────────┼──────────────\n"
+                header = "  n │    x_(n-1)    │      x_n      │   f(x_(n-1))  │    f(x_n)     │    x_{n+1}    │    |Δx|     \n"
+                divider = " ───┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┼─────────────\n"
                 self.trail_insert(header, "table_header")
                 self.trail_insert(divider, "divider")
 
                 for row in result["rows"]:
                     line = (
                         f" {row['n']:>2} │ "
-                        f"{row['x_prev']:>14.8f} │ "
-                        f"{row['x_curr']:>14.8f} │ "
-                        f"{row['f_prev']:>14.8f} │ "
-                        f"{row['f_curr']:>14.8f} │ "
-                        f"{row['x_next']:>14.8f} │ "
-                        f"{row['dx']:>12.8f}\n"
+                        f"{row['x_prev']:>12.8f} │ "
+                        f"{row['x_curr']:>12.8f} │ "
+                        f"{row['f_prev']:>12.8f} │ "
+                        f"{row['f_curr']:>12.8f} │ "
+                        f"{row['x_next']:>12.8f} │ "
+                        f"{row['dx']:>11.8f}\n"
                     )
                     self.trail_insert(line, "table_row")
             else:
-                header = "  n │      x_n       │     f(x_n)     │    f'(x_n)     │    x_{n+1}     │     |Δx|     \n"
-                divider = " ───┼────────────────┼────────────────┼────────────────┼────────────────┼──────────────\n"
+                header = "  n │      x_n      │     f(x_n)    │    f'(x_n)    │    x_{n+1}    │    |Δx|     \n"
+                divider = " ───┼──────────────┼──────────────┼──────────────┼──────────────┼─────────────\n"
                 
                 self.trail_insert(header, "table_header")
                 self.trail_insert(divider, "divider")
@@ -866,11 +830,11 @@ class RootSyncApp:
                 for row in result["rows"]:
                     line = (
                         f" {row['n']:>2} │ "
-                        f"{row['x_n']:>14.8f} │ "
-                        f"{row['f_x']:>14.8f} │ "
-                        f"{row['df_x']:>14.8f} │ "
-                        f"{row['x_next']:>14.8f} │ "
-                        f"{row['dx']:>12.8f}\n"
+                        f"{row['x_n']:>12.8f} │ "
+                        f"{row['f_x']:>12.8f} │ "
+                        f"{row['df_x']:>12.8f} │ "
+                        f"{row['x_next']:>12.8f} │ "
+                        f"{row['dx']:>11.8f}\n"
                     )
                     self.trail_insert(line, "table_row")
             
@@ -917,18 +881,18 @@ class RootSyncApp:
         # ═══════════════════════════════════════════════════════════════════
         self.insert_section("SUMMARY")
         self.trail_insert("\n", "normal")
-        self.trail_insert(f"  Timestamp:    {timestamp}\n", "muted")
-        self.trail_insert(f"  Python:       {pyver}\n", "muted")
-        self.trail_insert(f"  Platform:     {platform.system()} {platform.release()}\n", "muted")
-        self.trail_insert(f"  Graph:        {'Enabled' if MATPLOTLIB_OK else 'Disabled'}\n", "muted")
+        self.trail_insert(f"  Timestamp:   {timestamp}\n", "muted")
+        self.trail_insert(f"  Python:      {pyver}\n", "muted")
+        self.trail_insert(f"  Platform:    {platform.system()} {platform.release()}\n", "muted")
+        self.trail_insert(f"  Graph:       {'Enabled' if MATPLOTLIB_OK else 'Disabled'}\n", "muted")
         self.trail_insert("\n", "normal")
         
     def insert_section(self, title):
         """Insert a styled section header with clear visual separation"""
         self.trail_insert("\n", "normal")
-        self.trail_insert(f"{'═' * 52}\n", "divider")
+        self.trail_insert(f"{'═' * 54}\n", "divider")
         self.trail_insert(f"  {title}\n", "section")
-        self.trail_insert(f"{'═' * 52}\n", "divider")
+        self.trail_insert(f"{'═' * 54}\n", "divider")
 
     def insert_warnings_section(self, result):
         """Insert warning logs in a dedicated section for edge-case visibility."""

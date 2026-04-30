@@ -8,42 +8,42 @@ Modern engineering dashboard color scheme and typography
 # =============================================================================
 COLORS = {
     # Primary backgrounds
-    "bg_primary": "#FAFBFC",       # Very light gray - main background
-    "bg_secondary": "#FFFFFF",      # Pure white - cards/panels
-    "bg_header": "#1A2332",          # Dark navy - header bar
-    "bg_control": "#F0F4F8",         # Light blue-gray - control panel
-    
-    # Accent colors (teal/cyan theme)
-    "accent_primary": "#0891B2",     # Teal - primary accent
-    "accent_secondary": "#06B6D4",   # Cyan - secondary accent
-    "accent_hover": "#0E7490",       # Darker teal - hover states
-    "accent_light": "#E0F7FA",       # Very light cyan - highlights
+    "bg_primary": "#FFFFFF",         # Main background
+    "bg_secondary": "#FFFFFF",       # Panels/cards
+    "bg_header": "#FFFFFF",          # Header bar
+    "bg_control": "#FFFFFF",         # Control panel
+
+    # Accent colors (minimal professional blue theme)
+    "accent_primary": "#0F6CBD",     # Primary accent
+    "accent_secondary": "#2B7CD3",   # Secondary accent
+    "accent_hover": "#0959A5",       # Hover states
+    "accent_light": "#EAF3FF",       # Very light highlight
     
     # Text colors
-    "text_primary": "#1E293B",       # Dark slate - main text
-    "text_secondary": "#64748B",     # Medium slate - secondary text
-    "text_muted": "#94A3B8",         # Light slate - muted text
-    "text_inverse": "#FFFFFF",       # White - on dark backgrounds
+    "text_primary": "#111111",       # Main text
+    "text_secondary": "#4B5563",     # Secondary text
+    "text_muted": "#6B7280",         # Muted text
+    "text_inverse": "#FFFFFF",       # White - on accent backgrounds
     
     # Status colors
-    "success": "#10B981",            # Green - converged
-    "success_bg": "#D1FAE5",         # Light green background
-    "warning": "#F59E0B",            # Amber - not converged
-    "warning_bg": "#FEF3C7",         # Light amber background
-    "error": "#EF4444",              # Red - error
-    "error_bg": "#FEE2E2",           # Light red background
+    "success": "#16803C",            # Green - converged
+    "success_bg": "#EAF7EE",         # Light green background
+    "warning": "#B45309",            # Amber - not converged
+    "warning_bg": "#FFF5E6",         # Light amber background
+    "error": "#C53030",              # Red - error
+    "error_bg": "#FDECEC",           # Light red background
     
     # Graph colors
-    "graph_line": "#0891B2",         # Teal - function curve
-    "graph_point": "#F59E0B",        # Amber - iteration points
-    "graph_root": "#10B981",         # Green - root marker
-    "graph_initial": "#8B5CF6",      # Purple - initial guess
-    "graph_grid": "#E2E8F0",         # Light gray - grid
+    "graph_line": "#0F6CBD",         # Blue - function curve
+    "graph_point": "#B45309",        # Amber - iteration points
+    "graph_root": "#16803C",         # Green - root marker
+    "graph_initial": "#6D28D9",      # Purple - initial guess
+    "graph_grid": "#E5E7EB",         # Light gray - grid
     
     # Borders and dividers
-    "border_light": "#E2E8F0",       # Light border
+    "border_light": "#E5E7EB",       # Light border
     "border_medium": "#CBD5E1",      # Medium border
-    "shadow": "#1E293B",             # Shadow color (with alpha in use)
+    "shadow": "#111111",             # Shadow color (with alpha in use)
 }
 
 # =============================================================================
@@ -52,7 +52,7 @@ COLORS = {
 FONTS = {
     # Headers
     "title": ("Segoe UI", 22, "bold"),
-    "subtitle": ("Segoe UI", 12),
+    "subtitle": ("Segoe UI", 11),
     "section_header": ("Segoe UI", 11, "bold"),
     
     # Body
@@ -82,8 +82,8 @@ DIMENSIONS = {
     # Window
     "window_width": 1280,
     "window_height": 800,
-    "window_min_width": 1000,
-    "window_min_height": 600,
+    "window_min_width": 1040,
+    "window_min_height": 640,
     
     # Spacing
     "pad_xs": 4,
@@ -142,12 +142,12 @@ def apply_styles(style):
     
     style.configure("Header.TLabel",
                     background=COLORS["bg_header"],
-                    foreground=COLORS["text_inverse"],
+                    foreground=COLORS["text_primary"],
                     font=FONTS["title"])
     
     style.configure("HeaderSub.TLabel",
                     background=COLORS["bg_header"],
-                    foreground=COLORS["text_inverse"],
+                    foreground=COLORS["text_secondary"],
                     font=FONTS["subtitle"])
     
     style.configure("Control.TLabel",
@@ -222,7 +222,9 @@ def apply_styles(style):
     # Buttons - Primary (Calculate)
     style.configure("Primary.TButton",
                     font=FONTS["button_primary"],
-                    padding=(16, 8))
+                    padding=(16, 8),
+                    borderwidth=0,
+                    focusthickness=0)
     
     style.map("Primary.TButton",
               background=[("active", COLORS["accent_hover"]),
@@ -234,7 +236,9 @@ def apply_styles(style):
     # Buttons - Secondary (Clear)
     style.configure("Secondary.TButton",
                     font=FONTS["button"],
-                    padding=(12, 8))
+                    padding=(12, 8),
+                    borderwidth=1,
+                    focusthickness=0)
     
     style.map("Secondary.TButton",
               background=[("active", COLORS["border_medium"]),

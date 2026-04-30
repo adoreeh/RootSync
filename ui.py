@@ -9,6 +9,7 @@ import math
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog, messagebox
 
 # Import solver logic
 from solver import FUNCTIONS, newton_raphson, secant_method, validate_inputs, TEST_CASES
@@ -186,9 +187,15 @@ class RootSyncApp:
         # Inner content with padding
         control_inner = tk.Frame(control_panel, bg=COLORS['bg_control'])
         control_inner.pack(fill='x', padx=DIMENSIONS['pad_lg'], pady=DIMENSIONS['pad_md'])
+
+        # Left group: holds inputs and will expand/shrink, keeping buttons visible on the right
+        inner_left = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        # Use grid so we can reserve a fixed column for the buttons on the right
+        inner_left.grid(row=0, column=0, sticky='ew')
+        control_inner.grid_columnconfigure(0, weight=1)
         
         # Method selector
-        method_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        method_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         method_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
 
         tk.Label(
@@ -210,7 +217,7 @@ class RootSyncApp:
         self.method_menu.pack(anchor='w', pady=(2, 0))
 
         # Function selector
-        func_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        func_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         func_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
 
         tk.Label(
@@ -231,7 +238,7 @@ class RootSyncApp:
         self.func_menu.pack(anchor='w', pady=(2, 0))
         
         # Initial guess (x0)
-        x0_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        x0_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         x0_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
         
         tk.Label(
@@ -247,7 +254,7 @@ class RootSyncApp:
         self.x0_entry.insert(0, "1.5")
 
         # Second guess (x1) for Secant Method
-        x1_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        x1_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         x1_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
 
         tk.Label(
@@ -263,7 +270,7 @@ class RootSyncApp:
         self.x1_entry.insert(0, "2.0")
         
         # Tolerance
-        tol_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        tol_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         tol_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
         
         tk.Label(
@@ -279,7 +286,7 @@ class RootSyncApp:
         self.tol_entry.insert(0, "0.0001")
         
         # Max iterations
-        iter_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        iter_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         iter_frame.pack(side='left', padx=(0, DIMENSIONS['pad_lg']))
         
         tk.Label(
@@ -295,7 +302,7 @@ class RootSyncApp:
         self.iter_entry.insert(0, "20")
         
         # Test Case selector (for quick loading of documented test cases)
-        test_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
+        test_frame = tk.Frame(inner_left, bg=COLORS['bg_control'])
         test_frame.pack(side='left', padx=(0, DIMENSIONS['pad_xl']))
         
         tk.Label(
@@ -317,9 +324,9 @@ class RootSyncApp:
         self.test_menu.config(width=14)
         self.test_menu.pack(anchor='w', pady=(2, 0))
         
-        # Buttons frame (right side)
+        # Buttons frame (right side) - placed in a fixed grid column so it remains visible
         buttons_frame = tk.Frame(control_inner, bg=COLORS['bg_control'])
-        buttons_frame.pack(side='right')
+        buttons_frame.grid(row=0, column=1, sticky='e')
         
         # Clear button
         self.clear_btn = tk.Button(
@@ -338,7 +345,24 @@ class RootSyncApp:
         )
         self.clear_btn.pack(side='left', padx=(0, DIMENSIONS['pad_sm']))
         self.bind_hover_effect(self.clear_btn, COLORS['border_light'], COLORS['bg_secondary'])
-        
+        # Export Report button
+        self.export_btn = tk.Button(
+            buttons_frame,
+            text="Export Report",
+            font=FONTS['button'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_primary'],
+            activebackground=COLORS['border_medium'],
+            activeforeground=COLORS['text_primary'],
+            relief='flat',
+            cursor='hand2',
+            padx=14,
+            pady=6,
+            command=self.export_report
+        )
+        self.export_btn.pack(side='left', padx=(0, DIMENSIONS['pad_sm']))
+        self.bind_hover_effect(self.export_btn, COLORS['border_light'], COLORS['bg_secondary'])
+
         # Calculate button
         self.calc_btn = tk.Button(
             buttons_frame,
@@ -1247,6 +1271,34 @@ class RootSyncApp:
             self.ax.set_xlabel("x", fontsize=10, color=colors['text'])
             self.ax.set_ylabel("f(x)", fontsize=10, color=colors['text'])
             self.canvas.draw()
+
+    def export_report(self):
+        """Export the full solution trail to a text report file."""
+        try:
+            # Prompt user for save location
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text Files", "*.txt")],
+                initialfile="rootsync_report.txt",
+                title="Save report as"
+            )
+
+            # User cancelled
+            if not filename:
+                return
+
+            # Retrieve trail content (plain text)
+            content = self.trail.get("1.0", "end-1c")
+
+            # Write to file using utf-8
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            # Inform success
+            messagebox.showinfo("Export", "Report exported successfully")
+
+        except Exception as exc:
+            messagebox.showerror("Export Error", f"Failed to export report: {exc}")
     
     # =========================================================================
     # LOAD TEST CASE

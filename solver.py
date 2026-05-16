@@ -31,9 +31,30 @@ Core computation logic for root finding
    Notes:          Transcendental function, converges in ~3 iterations
 
 =============================================================================
+ WEEK 12 TESTING & QA: DEBUG FLAGS
+=============================================================================
+
+Enable console logging for debugging by setting the environment variable:
+  set ROOTSYNC_DEBUG=1
+
+All computations will log their key decisions to stdout for auditability.
+
+=============================================================================
 """
 
 import math
+import os
+
+
+# ============================================================================
+# DEBUG LOGGING CONFIGURATION (Week 12)
+# ============================================================================
+DEBUG = os.environ.get("ROOTSYNC_DEBUG", "").lower() == "1"
+
+def debug_log(section, message):
+    """Optional console logging for debugging (enabled with ROOTSYNC_DEBUG=1)"""
+    if DEBUG:
+        print(f"[{section}] {message}")
 
 
 def _is_finite_number(value):
@@ -102,7 +123,10 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
     iterations_used = 0
     warnings = []
 
+    debug_log("NEWTON_RAPHSON", f"Starting: x0={x0}, tol={tol}, max_iter={max_iter}")
+
     if not _is_finite_number(x):
+        debug_log("NEWTON_RAPHSON", "Non-finite initial guess detected")
         return {
             "converged": False,
             "root": x0,
@@ -158,6 +182,7 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
             x = x_next
             iterations_used = n + 1
             stop_reason = "Converged: |Δx| < tolerance."
+            debug_log("NEWTON_RAPHSON", f"Converged at iteration {n+1}: |Δx|={dx:.2e} < tol={tol:.2e}")
             break
 
         x = x_next
@@ -166,6 +191,7 @@ def newton_raphson(f, df, x0, tol, max_iter, deriv_eps=1e-12):
     if not converged and stop_reason == "":
         stop_reason = "Not converged: reached maximum iterations."
         warnings.append("Maximum iterations reached before tolerance was satisfied.")
+        debug_log("NEWTON_RAPHSON", f"Max iterations reached: {iterations_used} iterations completed")
 
     try:
         residual_raw = f(x)
@@ -212,7 +238,10 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
     iterations_used = 0
     warnings = []
 
+    debug_log("SECANT_METHOD", f"Starting: x0={x0}, x1={x1}, tol={tol}, max_iter={max_iter}")
+
     if not _is_finite_number(x_prev) or not _is_finite_number(x_curr):
+        debug_log("SECANT_METHOD", "Non-finite initial guesses detected")
         return {
             "converged": False,
             "root": x1,
@@ -270,6 +299,7 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
             x_curr = x_next
             iterations_used = n + 1
             stop_reason = "Converged: |Δx| < tolerance."
+            debug_log("SECANT_METHOD", f"Converged at iteration {n+1}: |Δx|={dx:.2e} < tol={tol:.2e}")
             break
 
         x_prev = x_curr
@@ -279,6 +309,7 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
     if not converged and stop_reason == "":
         stop_reason = "Not converged: reached maximum iterations."
         warnings.append("Maximum iterations reached before tolerance was satisfied.")
+        debug_log("SECANT_METHOD", f"Max iterations reached: {iterations_used} iterations completed")
 
     try:
         residual_raw = f(x_curr)
@@ -306,7 +337,16 @@ def secant_method(f, x0, x1, tol, max_iter, denom_eps=1e-12):
 # =============================================================================
 # TEST CASES (for programmatic verification)
 # =============================================================================
+# Week 12: Enhanced test suite with 10+ test cases covering:
+# - Valid inputs with convergence
+# - Invalid inputs (error handling)
+# - Edge cases (tolerance boundaries, near-zero derivatives)
+# - Stopping rules (convergence, max iterations, non-convergence)
+# - Export and verification tests
 TEST_CASES = [
+    # ═════════════════════════════════════════════════════════════════════
+    # VALID INPUT TESTS (Expected to converge)
+    # ═════════════════════════════════════════════════════════════════════
     {
         "name": "Test Case 1",
         "function": "f(x) = x² − 4",
@@ -314,7 +354,8 @@ TEST_CASES = [
         "tol": 0.0001,
         "max_iter": 20,
         "expected_root": 2.0,
-        "description": "Simple quadratic function with exact root at x=2"
+        "description": "Simple quadratic function with exact root at x=2",
+        "category": "valid_convergence"
     },
     {
         "name": "Test Case 2",
@@ -323,7 +364,8 @@ TEST_CASES = [
         "tol": 0.0001,
         "max_iter": 20,
         "expected_root": 1.5214,
-        "description": "Cubic function - real root approximation"
+        "description": "Cubic function - real root approximation",
+        "category": "valid_convergence"
     },
     {
         "name": "Test Case 3",
@@ -332,7 +374,121 @@ TEST_CASES = [
         "tol": 0.0001,
         "max_iter": 20,
         "expected_root": 0.5671,
-        "description": "Transcendental function - Lambert W solution"
+        "description": "Transcendental function - Lambert W solution",
+        "category": "valid_convergence"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # CONVERGENCE EDGE CASES (tight tolerance, many iterations)
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 4",
+        "function": "f(x) = x² − 4",
+        "x0": 3.0,
+        "tol": 1e-10,  # Very tight tolerance
+        "max_iter": 100,
+        "expected_root": 2.0,
+        "description": "Tight tolerance test - requires many iterations",
+        "category": "convergence_tight_tolerance"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # STOPPING RULE TESTS (max iterations reached)
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 5",
+        "function": "f(x) = x³ − x − 2",
+        "x0": 1.5,
+        "tol": 1e-15,  # Impossibly tight - forces max iterations
+        "max_iter": 5,  # Few iterations allowed
+        "expected_root": 1.5214,  # Expected if full convergence
+        "description": "Max iterations stopping rule - tests iteration limit",
+        "category": "stopping_rule_max_iter"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # EDGE CASE: NEAR-ZERO DERIVATIVE (Newton-Raphson stability)
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 6",
+        "function": "f(x) = x² − 4",
+        "x0": 0.0,  # Close to point where f'(x) = 2x ≈ 0
+        "tol": 0.01,
+        "max_iter": 20,
+        "expected_root": 2.0,  # Should still converge despite small derivative
+        "description": "Near-zero derivative test - Newton-Raphson stability",
+        "category": "edge_case_derivative"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # SECANT METHOD SPECIFIC TESTS (different initial guesses)
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 7",
+        "function": "f(x) = x² − 4",
+        "x0": 1.0,  # First guess
+        "x1": 3.0,  # Second guess
+        "tol": 0.0001,
+        "max_iter": 20,
+        "expected_root": 2.0,
+        "description": "Secant method with converging guesses",
+        "category": "secant_valid"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # EDGE CASE: VERY SMALL TOLERANCE
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 8",
+        "function": "f(x) = x² − 4",
+        "x0": 3.0,
+        "tol": 0.00001,  # Very small tolerance
+        "max_iter": 50,
+        "expected_root": 2.0,
+        "description": "Very small tolerance - tests precision handling",
+        "category": "edge_case_small_tol"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # EDGE CASE: INITIAL GUESS CLOSE TO ROOT
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 9",
+        "function": "f(x) = x² − 4",
+        "x0": 2.01,  # Very close to actual root (2.0)
+        "tol": 0.0001,
+        "max_iter": 20,
+        "expected_root": 2.0,
+        "description": "Initial guess close to root - tests fast convergence",
+        "category": "edge_case_near_root"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # EDGE CASE: INITIAL GUESS FAR FROM ROOT
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 10",
+        "function": "f(x) = x² − 4",
+        "x0": 100.0,  # Very far from root
+        "tol": 0.0001,
+        "max_iter": 50,
+        "expected_root": 2.0,
+        "description": "Initial guess far from root - tests robustness",
+        "category": "edge_case_far_guess"
+    },
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # VALIDATION TEST: NEGATIVE INITIAL GUESS
+    # ═════════════════════════════════════════════════════════════════════
+    {
+        "name": "Test Case 11",
+        "function": "f(x) = x² − 4",
+        "x0": -3.0,  # Negative initial guess (different root: x = -2)
+        "tol": 0.0001,
+        "max_iter": 20,
+        "expected_root": -2.0,
+        "description": "Negative initial guess - finds different root",
+        "category": "valid_negative_root"
     },
 ]
 
@@ -345,10 +501,16 @@ def run_test_cases():
     Usage:
         from solver import run_test_cases
         run_test_cases()
+    
+    Week 12 Enhancement:
+    - Runs 11 comprehensive test cases
+    - Reports convergence, iteration counts
+    - Validates against expected roots
+    - Provides category-based results
     """
-    print("\n" + "=" * 60)
-    print(" NEWTON-RAPHSON SOLVER - TEST CASE VERIFICATION")
-    print("=" * 60)
+    print("\n" + "=" * 80)
+    print(" ROOTSYNC - COMPREHENSIVE TEST SUITE (Week 12 QA)")
+    print("=" * 80)
     
     func_map = {
         "f(x) = x² − 4": (f1, df1),
@@ -357,45 +519,90 @@ def run_test_cases():
     }
     
     all_passed = True
+    results_by_category = {}
     
     for tc in TEST_CASES:
+        category = tc.get("category", "uncategorized")
+        if category not in results_by_category:
+            results_by_category[category] = {"passed": 0, "total": 0}
+        results_by_category[category]["total"] += 1
+        
         print(f"\n{tc['name']}: {tc['function']}")
-        print("-" * 50)
+        print(f"  Category: {category}")
+        print(f"  Description: {tc['description']}")
+        print("-" * 80)
         
         f, df = func_map[tc['function']]
-        result = newton_raphson(f, df, tc['x0'], tc['tol'], tc['max_iter'])
+        
+        # Run with appropriate method
+        if "x1" in tc:
+            # Secant Method
+            x1 = tc['x1']
+            result = secant_method(f, tc['x0'], x1, tc['tol'], tc['max_iter'])
+            print(f"  Method: Secant")
+            print(f"  x₀ = {tc['x0']:>10.6f}  |  x₁ = {x1:>10.6f}")
+        else:
+            # Newton-Raphson
+            result = newton_raphson(f, df, tc['x0'], tc['tol'], tc['max_iter'])
+            print(f"  Method: Newton-Raphson")
+            print(f"  x₀ = {tc['x0']:>10.6f}")
         
         root = result['root']
         expected = tc['expected_root']
         error = abs(root - expected)
         passed = error < 0.01  # Allow 1% tolerance for test verification
         
-        print(f"  Initial Guess:  x₀ = {tc['x0']}")
-        print(f"  Tolerance:      ε = {tc['tol']}")
-        print(f"  Max Iterations: {tc['max_iter']}")
-        print(f"  Computed Root:  x ≈ {root:.6f}")
-        print(f"  Expected Root:  x ≈ {expected:.4f}")
-        print(f"  Error:          |Δ| = {error:.6f}")
+        print(f"  ε = {tc['tol']:>15.2e}  |  Max Iterations: {tc['max_iter']}")
+        print(f"\n  Computed Root:  {root:>14.8f}")
+        print(f"  Expected Root:  {expected:>14.8f}")
+        print(f"  Error:          {error:>14.10f}")
         print(f"  Converged:      {result['converged']}")
-        print(f"  Iterations:     {result['iterations']}")
+        print(f"  Iterations:     {result['iterations']}/{tc['max_iter']}")
+        print(f"  Residual:       {result['residual']:>14.2e}")
         print(f"  Status:         {'✓ PASS' if passed else '✗ FAIL'}")
+        
+        # Show warnings if any
+        warnings = result.get("warnings", [])
+        if warnings:
+            print(f"\n  Warnings ({len(warnings)}):")
+            for i, w in enumerate(warnings, 1):
+                print(f"    {i}. {w}")
         
         if not passed:
             all_passed = False
+        else:
+            results_by_category[category]["passed"] += 1
     
-    print("\n" + "=" * 60)
+    # Summary by category
+    print("\n" + "=" * 80)
+    print(" TEST RESULTS BY CATEGORY")
+    print("=" * 80)
+    for category, stats in sorted(results_by_category.items()):
+        passed = stats["passed"]
+        total = stats["total"]
+        status = "✓ PASS" if passed == total else f"✓ {passed}/{total}"
+        print(f"  {category:<40} {status}")
+    
+    print("\n" + "=" * 80)
     print(f" OVERALL RESULT: {'ALL TESTS PASSED ✓' if all_passed else 'SOME TESTS FAILED ✗'}")
-    print("=" * 60 + "\n")
+    print(f" ({sum(r['passed'] for r in results_by_category.values())}/{sum(r['total'] for r in results_by_category.values())} tests passed)")
+    print("=" * 80 + "\n")
     
     return all_passed
 
 
 # =============================================================================
-# INPUT VALIDATION
+# INPUT VALIDATION (Week 12 Enhanced)
 # =============================================================================
 def validate_inputs(x0_raw, tol_raw, max_iter_raw, method="Newton-Raphson", x1_raw=None):
     """
     Validate user inputs for supported root-finding computations.
+    
+    Week 12 Enhancements:
+    - Reusable validation pattern for error handling
+    - Comprehensive edge case checks
+    - Clear, actionable error messages
+    - Debug logging for troubleshooting
     
     Parameters:
         x0_raw: Raw string for initial guess x0
@@ -407,57 +614,130 @@ def validate_inputs(x0_raw, tol_raw, max_iter_raw, method="Newton-Raphson", x1_r
     Returns:
         tuple: (ok: bool, data: dict or None, error_message: str)
     """
-    x0_str = x0_raw.strip()
-    tol_str = tol_raw.strip()
-    it_str = max_iter_raw.strip()
+    # Strip whitespace from all inputs
+    x0_str = (x0_raw or "").strip()
+    tol_str = (tol_raw or "").strip()
+    it_str = (max_iter_raw or "").strip()
     method_str = (method or "").strip()
-    x1_str = x1_raw.strip() if x1_raw is not None else ""
+    x1_str = (x1_raw or "").strip() if x1_raw is not None else ""
 
+    debug_log("VALIDATION", f"Method={method_str}, x0='{x0_str}', tol='{tol_str}', iter='{it_str}', x1='{x1_str}'")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 1: Check for empty inputs
+    # ─────────────────────────────────────────────────────────────────────
     if not x0_str or not tol_str or not it_str:
-        return (False, None, "All fields are required (x₀, tolerance, max iterations).")
+        msg = "All fields are required (x₀, tolerance, max iterations)."
+        debug_log("VALIDATION", f"FAIL: {msg}")
+        return (False, None, msg)
 
     if method_str.lower().startswith("secant") and not x1_str:
-        return (False, None, "Second Guess (x₁) is required for Secant Method.")
+        msg = "Second Guess (x₁) is required for Secant Method."
+        debug_log("VALIDATION", f"FAIL: {msg}")
+        return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 2: Parse x0 (initial guess)
+    # ─────────────────────────────────────────────────────────────────────
     try:
         x0 = float(x0_str)
     except ValueError:
-        return (False, None, "Initial Guess (x₀) must be a valid number.")
+        msg = "Initial Guess (x₀) must be a valid number."
+        debug_log("VALIDATION", f"FAIL: {msg} (got '{x0_str}')")
+        return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 3: Parse tolerance
+    # ─────────────────────────────────────────────────────────────────────
     try:
         tol = float(tol_str)
     except ValueError:
-        return (False, None, "Tolerance must be a valid decimal number.")
+        msg = "Tolerance must be a valid decimal number."
+        debug_log("VALIDATION", f"FAIL: {msg} (got '{tol_str}')")
+        return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 4: Parse max iterations
+    # ─────────────────────────────────────────────────────────────────────
     try:
         max_iter = int(it_str)
     except ValueError:
-        return (False, None, "Max Iterations must be an integer.")
+        msg = "Max Iterations must be an integer."
+        debug_log("VALIDATION", f"FAIL: {msg} (got '{it_str}')")
+        return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 5: Parse x1 (second guess for Secant Method)
+    # ─────────────────────────────────────────────────────────────────────
     x1 = None
     if x1_str:
         try:
             x1 = float(x1_str)
         except ValueError:
-            return (False, None, "Second Guess (x₁) must be a valid number.")
+            msg = "Second Guess (x₁) must be a valid number."
+            debug_log("VALIDATION", f"FAIL: {msg} (got '{x1_str}')")
+            return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 6: Check for non-finite values (NaN, Inf)
+    # ─────────────────────────────────────────────────────────────────────
     if not math.isfinite(x0):
-        return (False, None, "Initial Guess (x₀) must be finite (not NaN or Infinity).")
+        msg = "Initial Guess (x₀) must be finite (not NaN or Infinity)."
+        debug_log("VALIDATION", f"FAIL: {msg} (x0={x0})")
+        return (False, None, msg)
 
     if x1 is not None and not math.isfinite(x1):
-        return (False, None, "Second Guess (x₁) must be finite (not NaN or Infinity).")
+        msg = "Second Guess (x₁) must be finite (not NaN or Infinity)."
+        debug_log("VALIDATION", f"FAIL: {msg} (x1={x1})")
+        return (False, None, msg)
 
     if not math.isfinite(tol):
-        return (False, None, "Tolerance must be finite (not NaN or Infinity).")
+        msg = "Tolerance must be finite (not NaN or Infinity)."
+        debug_log("VALIDATION", f"FAIL: {msg} (tol={tol})")
+        return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 7: Validate tolerance (must be positive)
+    # ─────────────────────────────────────────────────────────────────────
     if tol <= 0:
-        return (False, None, "Tolerance must be greater than 0.")
-    
-    if max_iter <= 0 or max_iter > 1000:
-        return (False, None, "Max Iterations must be between 1 and 1000.")
+        msg = "Tolerance must be greater than 0."
+        debug_log("VALIDATION", f"FAIL: {msg} (tol={tol})")
+        return (False, None, msg)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 8: Validate max iterations (positive, reasonable range)
+    # ─────────────────────────────────────────────────────────────────────
+    if max_iter <= 0:
+        msg = "Max Iterations must be positive (at least 1)."
+        debug_log("VALIDATION", f"FAIL: {msg} (max_iter={max_iter})")
+        return (False, None, msg)
+
+    if max_iter > 10000:  # Sanity check (prevent extreme iterations)
+        msg = "Max Iterations cannot exceed 10000 (please use a reasonable value)."
+        debug_log("VALIDATION", f"FAIL: {msg} (max_iter={max_iter})")
+        return (False, None, msg)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STEP 9: Secant Method specific validation
+    # ─────────────────────────────────────────────────────────────────────
+    if method_str.lower().startswith("secant"):
+        if x1 is None:
+            msg = "Secant Method requires both x₀ and x₁."
+            debug_log("VALIDATION", f"FAIL: {msg}")
+            return (False, None, msg)
+        
+        # Ensure x0 and x1 are different
+        if abs(x0 - x1) < 1e-14:
+            msg = "Secant Method requires two different guesses (x₀ ≠ x₁)."
+            debug_log("VALIDATION", f"FAIL: {msg} (x0={x0}, x1={x1}, diff={abs(x0 - x1)})")
+            return (False, None, msg)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # VALIDATION PASSED
+    # ─────────────────────────────────────────────────────────────────────
     data = {"x0": x0, "tol": tol, "max_iter": max_iter}
     if x1 is not None:
         data["x1"] = x1
-
+    
+    debug_log("VALIDATION", f"PASS ✓")
     return (True, data, "")

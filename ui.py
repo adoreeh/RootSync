@@ -4,6 +4,7 @@ Engineering dashboard interface for Newton-Raphson root finder
 """
 
 import sys
+import os
 import platform
 import math
 from datetime import datetime
@@ -50,6 +51,16 @@ class RootSyncApp:
         self.create_ui()
         self.is_computing = False
         self.loading_animation_id = None
+        self.debug = os.environ.get("ROOTSYNC_DEBUG", "").lower() == "1"
+        
+        # Week 12: Log application startup
+        if self.debug:
+            print(f"[UIINIT] {self.APP_NAME} {self.APP_VERSION} started")
+        
+    def debug_log(self, section, message):
+        """Optional console logging for UI debugging"""
+        if self.debug:
+            print(f"[{section}] {message}")
         
     def setup_window(self):
         """Configure main window"""
@@ -652,91 +663,153 @@ class RootSyncApp:
         )
         
     # =========================================================================
-    # COMPUTATION
+    # COMPUTATION (Week 12 Enhanced with error handling)
     # =========================================================================
     def compute(self):
-        """Run computation for the selected method"""
+        """Run computation for the selected method with robust error handling"""
         if self.is_computing:
             return
+        
+        try:
+            # Clear and reset
+            self.trail_clear()
+            self.reset_status()
             
-        # Clear and reset
-        self.trail_clear()
-        self.reset_status()
-        
-        # Start loading animation
-        self.start_loading()
-        
-        # Validate inputs
-        ok, data, err = validate_inputs(
-            self.x0_entry.get(),
-            self.tol_entry.get(),
-            self.iter_entry.get(),
-            method=self.method_var.get(),
-            x1_raw=self.x1_entry.get()
-        )
-        
-        # Log validation
-        self.insert_section("VALIDATION")
-        
-        if not ok:
+            # Start loading animation
+            self.start_loading()
+            self.debug_log("COMPUTE", "Starting computation cycle")
+            
+            # Validate inputs
+            method_name = self.method_var.get()
+            self.debug_log("COMPUTE", f"Selected method: {method_name}")
+            
+            ok, data, err = validate_inputs(
+                self.x0_entry.get(),
+                self.tol_entry.get(),
+                self.iter_entry.get(),
+                method=method_name,
+                x1_raw=self.x1_entry.get()
+            )
+            
+            # Log validation result
+            self.insert_section("VALIDATION")
+            
+            if not ok:
+                self.debug_log("VALIDATION", f"FAILED: {err}")
+                self.trail_insert(f"Status: FAIL\n", "warning")
+                self.trail_insert(f"Reason: {err}\n", "normal")
+                self.stop_loading()
+                self.set_badge("Error", "error")
+                return
+            else:
+                self.debug_log("VALIDATION", "PASSED")
+                self.trail_insert("Status: PASS ✓\n\n", "success")
+            
+            # Schedule computation to allow UI update
+            self.root.after(100, lambda: self.run_computation(data))
+            
+        except Exception as exc:
+            # Last-resort error handler for compute method itself
+            self.debug_log("COMPUTE", f"Unexpected error: {exc.__class__.__name__}: {exc}")
+            self.trail_clear()
+            self.insert_section("ERROR")
             self.trail_insert(f"Status: FAIL\n", "warning")
-            self.trail_insert(f"Reason: {err}\n", "normal")
+            self.trail_insert(f"Unexpected error during validation:\n{exc}\n", "normal")
             self.stop_loading()
             self.set_badge("Error", "error")
-            return
-        else:
-            self.trail_insert("Status: PASS ✓\n\n", "success")
-            
-        # Schedule computation to allow UI update
-        self.root.after(100, lambda: self.run_computation(data))
+            messagebox.showerror("Computation Error", f"An unexpected error occurred:\n\n{exc}")
         
     def run_computation(self, data):
-        """Execute the selected solver"""
-        func_name = self.func_var.get()
-        method_name = self.method_var.get()
-        f, df = FUNCTIONS[func_name]
-        
-        x0 = data["x0"]
-        tol = data["tol"]
-        max_iter = data["max_iter"]
-        x1 = data.get("x1")
-
+        """Execute the selected solver with comprehensive error handling"""
         try:
-            if method_name == "Secant Method":
-                result = secant_method(f, x0, x1, tol, max_iter)
-            else:
-                result = newton_raphson(f, df, x0, tol, max_iter)
-        except Exception as exc:
-            # Last-resort protection so UI never crashes due to solver errors.
-            fallback_root = x1 if method_name == "Secant Method" and x1 is not None else x0
-            result = {
-                "converged": False,
-                "root": fallback_root,
-                "iterations": 0,
-                "rows": [],
-                "stop_reason": "Stopped: unexpected runtime error.",
-                "residual": float("inf"),
-                "warnings": [f"Unexpected solver exception: {exc.__class__.__name__}: {exc}"],
-            }
-        
-        # Build solution trail
-        self.build_solution_trail(func_name, f, method_name, x0, x1, tol, max_iter, result)
-        
-        # Update status panel
-        self.update_status(result)
-        
-        # Plot graph
-        if MATPLOTLIB_OK:
-            try:
-                self.plot_function(func_name, f, result, x0, method_name, x1)
-            except Exception as exc:
-                self.insert_section("WARNINGS")
-                self.trail_insert("\n", "normal")
-                self.trail_insert(f"  ! Graph warning: {exc.__class__.__name__}: {exc}\n", "warning")
-                self.trail_insert("\n", "normal")
+            func_name = self.func_var.get()
+            method_name = self.method_var.get()
+            self.debug_log("COMPUTATION", f"Running {method_name} on {func_name}")
             
-        # Stop loading
-        self.stop_loading()
+            # Retrieve function and derivative
+            try:
+                f, df = FUNCTIONS[func_name]
+                self.debug_log("COMPUTATION", f"Function loaded: {func_name}")
+            except KeyError as exc:
+                raise ValueError(f"Function not found: {func_name}") from exc
+            
+            x0 = data["x0"]
+            tol = data["tol"]
+            max_iter = data["max_iter"]
+            x1 = data.get("x1")
+
+            # Run solver with error protection
+            try:
+                if method_name == "Secant Method":
+                    if x1 is None:
+                        raise ValueError("Secant Method requires x1 (second guess)")
+                    self.debug_log("COMPUTATION", f"Secant: x0={x0}, x1={x1}, tol={tol}, max_iter={max_iter}")
+                    result = secant_method(f, x0, x1, tol, max_iter)
+                else:
+                    self.debug_log("COMPUTATION", f"Newton-Raphson: x0={x0}, tol={tol}, max_iter={max_iter}")
+                    result = newton_raphson(f, df, x0, tol, max_iter)
+                    
+                self.debug_log("COMPUTATION", f"Solver completed: converged={result['converged']}, iterations={result['iterations']}")
+                
+            except Exception as exc:
+                # Solver itself raised an error (shouldn't happen, but just in case)
+                self.debug_log("COMPUTATION", f"Solver exception: {exc.__class__.__name__}: {exc}")
+                fallback_root = x1 if method_name == "Secant Method" and x1 is not None else x0
+                result = {
+                    "converged": False,
+                    "root": fallback_root,
+                    "iterations": 0,
+                    "rows": [],
+                    "stop_reason": "Stopped: unexpected runtime error.",
+                    "residual": float("inf"),
+                    "warnings": [f"Solver exception: {exc.__class__.__name__}: {exc}"],
+                }
+            
+            # Build solution trail
+            try:
+                self.build_solution_trail(func_name, f, method_name, x0, x1, tol, max_iter, result)
+                self.debug_log("COMPUTATION", "Solution trail built")
+            except Exception as exc:
+                self.debug_log("COMPUTATION", f"Trail building warning: {exc}")
+                self.trail_insert(f"\n⚠ Warning: Solution trail formatting error: {exc}\n", "warning")
+            
+            # Update status panel
+            try:
+                self.update_status(result)
+                self.debug_log("COMPUTATION", "Status panel updated")
+            except Exception as exc:
+                self.debug_log("COMPUTATION", f"Status update warning: {exc}")
+            
+            # Plot graph
+            if MATPLOTLIB_OK:
+                try:
+                    self.plot_function(func_name, f, result, x0, method_name, x1)
+                    self.debug_log("COMPUTATION", "Graph plotted")
+                except Exception as exc:
+                    self.debug_log("COMPUTATION", f"Graph warning: {exc.__class__.__name__}: {exc}")
+                    self.insert_section("WARNINGS")
+                    self.trail_insert("\n", "normal")
+                    self.trail_insert(f"  ! Graph rendering warning: {exc.__class__.__name__}\n", "warning")
+                    self.trail_insert(f"  ! The computation succeeded, but graph display failed.\n", "warning")
+                    self.trail_insert("\n", "normal")
+            
+            # Stop loading
+            self.stop_loading()
+            self.debug_log("COMPUTATION", "Computation cycle complete")
+                
+        except Exception as exc:
+            # Outermost safety net
+            self.debug_log("COMPUTATION", f"CRITICAL ERROR: {exc.__class__.__name__}: {exc}")
+            self.stop_loading()
+            self.trail_clear()
+            self.insert_section("CRITICAL ERROR")
+            self.trail_insert(f"\nAn unexpected error occurred:\n{exc.__class__.__name__}: {exc}\n", "warning")
+            self.trail_insert("\nPlease check your inputs and try again.\n", "normal")
+            self.set_badge("Error", "error")
+            messagebox.showerror(
+                "Computation Error", 
+                f"An unexpected error occurred:\n\n{exc.__class__.__name__}: {exc}\n\nPlease check your inputs and try again."
+            )
         
     def build_solution_trail(self, func_name, f, method_name, x0, x1, tol, max_iter, result):
         """Build the formatted solution trail with clear sections and real iteration data"""
@@ -1096,217 +1169,366 @@ class RootSyncApp:
         self.clear_btn.config(state='normal')
         
     # =========================================================================
-    # PLOTTING
+    # PLOTTING (Week 12 Enhanced with robustness)
     # =========================================================================
     def plot_function(self, func_name, f, result, x0, method_name, x1=None):
-        """Plot the function with iteration points"""
-        colors = get_graph_colors()
-        
-        self.ax.clear()
-        self.ax.set_facecolor(colors['axes_bg'])
-        self.ax.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.7)
-        
-        root_est = result['root']
-        rows = result['rows']
-        
-        # Determine x range using both initial guesses when available
-        base_points = [x0, root_est]
-        if x1 is not None:
-            base_points.append(x1)
-        center = sum(base_points) / len(base_points)
-        span = max(2.0, max(abs(center - p) for p in base_points) * 4.0)
-        x_min = center - span
-        x_max = center + span
-        
-        if x_min == x_max:
-            x_min -= 2
-            x_max += 2
-            
-        # Generate curve points
-        xs = []
-        ys = []
-        steps = 400
-        for i in range(steps + 1):
-            x = x_min + (x_max - x_min) * (i / steps)
-            try:
-                y = f(x)
-            except Exception:
-                y = float("nan")
-            xs.append(x)
-            ys.append(y)
-            
-        # Plot function curve
-        self.ax.plot(xs, ys, color=colors['line'], linewidth=2.5, label='f(x)')
-        
-        # Plot x-axis
-        self.ax.axhline(0, color=colors['axis'], linewidth=1)
-        
-        # Plot initial guesses
+        """Plot the function with iteration points - with comprehensive error handling"""
         try:
-            self.ax.scatter(
-                [x0], [f(x0)],
-                s=80, color=colors['initial'],
-                marker='o', zorder=5,
-                label=f'x₀ = {x0:.2f}'
-            )
-            if x1 is not None:
-                self.ax.scatter(
-                    [x1], [f(x1)],
-                    s=80, color=colors['accent_secondary'],
-                    marker='D', zorder=5,
-                    label=f'x₁ = {x1:.2f}'
-                )
-        except Exception:
-            pass
+            if not MATPLOTLIB_OK or self.ax is None or self.fig is None:
+                self.debug_log("PLOT", "Matplotlib not available, skipping plot")
+                return
             
-        # Plot iteration points
-        if rows:
-            if method_name == "Secant Method":
-                iter_xs = [r["x_curr"] for r in rows]
-                iter_ys = [r["f_curr"] for r in rows]
-            else:
-                iter_xs = [r["x_n"] for r in rows]
-                iter_ys = [r["f_x"] for r in rows]
-            self.ax.scatter(
-                iter_xs, iter_ys,
-                s=40, color=colors['points'],
-                marker='o', alpha=0.8, zorder=4,
-                label='Iterations'
-            )
+            self.debug_log("PLOT", f"Plotting {func_name}")
             
-        # Plot root estimate
-        self.ax.scatter(
-            [root_est], [0],
-            s=120, color=colors['root'],
-            marker='X', zorder=6,
-            label=f'Root ≈ {root_est:.4f}'
-        )
-        
-        # Style axes
-        self.ax.set_xlabel("x", fontsize=10, color=colors['text'])
-        self.ax.set_ylabel("f(x)", fontsize=10, color=colors['text'])
-        self.ax.set_title(func_name, fontsize=11, fontweight='bold', color=colors['text'], pad=10)
-        
-        # Legend
-        self.ax.legend(loc='best', fontsize=8, framealpha=0.9)
-        
-        # Adjust tick colors
-        self.ax.tick_params(colors=colors['axis'], labelsize=9)
-        for spine in self.ax.spines.values():
-            spine.set_color(colors['grid'])
+            colors = get_graph_colors()
             
-        self.fig.tight_layout()
-        self.canvas.draw()
+            # Clear previous plot
+            try:
+                self.ax.clear()
+            except Exception as exc:
+                self.debug_log("PLOT", f"Clear warning: {exc}")
+            
+            # Set background colors
+            try:
+                self.ax.set_facecolor(colors['axes_bg'])
+                self.ax.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.7)
+            except Exception as exc:
+                self.debug_log("PLOT", f"Style warning: {exc}")
+            
+            root_est = result['root']
+            rows = result['rows']
+            
+            # Determine x range with error handling
+            try:
+                base_points = [x0, root_est]
+                if x1 is not None:
+                    base_points.append(x1)
+                center = sum(base_points) / len(base_points)
+                span = max(2.0, max(abs(center - p) for p in base_points) * 4.0)
+                x_min = center - span
+                x_max = center + span
+                
+                if x_min == x_max:
+                    x_min -= 2
+                    x_max += 2
+                    
+                self.debug_log("PLOT", f"X range: [{x_min:.2f}, {x_max:.2f}]")
+            except Exception as exc:
+                self.debug_log("PLOT", f"X-range calculation warning: {exc}, using defaults")
+                x_min, x_max = -5, 5
+            
+            # Generate curve points with safety checks
+            try:
+                xs = []
+                ys = []
+                steps = 400
+                for i in range(steps + 1):
+                    x = x_min + (x_max - x_min) * (i / steps)
+                    try:
+                        y = f(x)
+                        # Skip if y is infinite or too large (for display purposes)
+                        if math.isfinite(y) and abs(y) < 1e10:
+                            xs.append(x)
+                            ys.append(y)
+                    except Exception:
+                        # Skip problematic points
+                        pass
+                
+                if xs and ys:
+                    self.ax.plot(xs, ys, color=colors['line'], linewidth=2.5, label='f(x)')
+                    self.debug_log("PLOT", f"Plotted {len(xs)} function points")
+                else:
+                    self.debug_log("PLOT", "Warning: No valid function points to plot")
+                    
+            except Exception as exc:
+                self.debug_log("PLOT", f"Function curve warning: {exc}")
+            
+            # Plot x-axis
+            try:
+                self.ax.axhline(0, color=colors['axis'], linewidth=1)
+            except Exception as exc:
+                self.debug_log("PLOT", f"X-axis warning: {exc}")
+            
+            # Plot initial guesses with error handling
+            try:
+                try:
+                    fx0 = f(x0)
+                    if math.isfinite(fx0):
+                        self.ax.scatter(
+                            [x0], [fx0],
+                            s=80, color=colors['initial'],
+                            marker='o', zorder=5,
+                            label=f'x₀ = {x0:.2f}'
+                        )
+                except Exception:
+                    pass
+                
+                if x1 is not None:
+                    try:
+                        fx1 = f(x1)
+                        if math.isfinite(fx1):
+                            self.ax.scatter(
+                                [x1], [fx1],
+                                s=80, color=colors['accent_secondary'],
+                                marker='D', zorder=5,
+                                label=f'x₁ = {x1:.2f}'
+                            )
+                    except Exception:
+                        pass
+            except Exception as exc:
+                self.debug_log("PLOT", f"Initial guess marker warning: {exc}")
+            
+            # Plot iteration points with error handling
+            try:
+                if rows:
+                    if method_name == "Secant Method":
+                        iter_xs = [r["x_curr"] for r in rows if math.isfinite(r["x_curr"])]
+                        iter_ys = [r["f_curr"] for r in rows if math.isfinite(r["f_curr"])]
+                    else:
+                        iter_xs = [r["x_n"] for r in rows if math.isfinite(r["x_n"])]
+                        iter_ys = [r["f_x"] for r in rows if math.isfinite(r["f_x"])]
+                    
+                    if iter_xs and iter_ys:
+                        self.ax.scatter(
+                            iter_xs, iter_ys,
+                            s=40, color=colors['points'],
+                            marker='o', alpha=0.8, zorder=4,
+                            label='Iterations'
+                        )
+                        self.debug_log("PLOT", f"Plotted {len(iter_xs)} iteration points")
+            except Exception as exc:
+                self.debug_log("PLOT", f"Iteration points warning: {exc}")
+            
+            # Plot root estimate with error handling
+            try:
+                if math.isfinite(root_est):
+                    self.ax.scatter(
+                        [root_est], [0],
+                        s=120, color=colors['root'],
+                        marker='X', zorder=6,
+                        label=f'Root ≈ {root_est:.4f}'
+                    )
+            except Exception as exc:
+                self.debug_log("PLOT", f"Root marker warning: {exc}")
+            
+            # Style axes with error handling
+            try:
+                self.ax.set_xlabel("x", fontsize=10, color=colors['text'])
+                self.ax.set_ylabel("f(x)", fontsize=10, color=colors['text'])
+                self.ax.set_title(func_name, fontsize=11, fontweight='bold', color=colors['text'], pad=10)
+                self.ax.legend(loc='best', fontsize=8, framealpha=0.9)
+                self.ax.tick_params(colors=colors['axis'], labelsize=9)
+                for spine in self.ax.spines.values():
+                    spine.set_color(colors['grid'])
+            except Exception as exc:
+                self.debug_log("PLOT", f"Styling warning: {exc}")
+            
+            # Draw canvas with error handling
+            try:
+                self.fig.tight_layout()
+                self.canvas.draw()
+                self.debug_log("PLOT", "Plot rendered successfully")
+            except Exception as exc:
+                self.debug_log("PLOT", f"Canvas draw warning: {exc}")
+                
+        except Exception as exc:
+            self.debug_log("PLOT", f"CRITICAL ERROR: {exc.__class__.__name__}: {exc}")
         
     # =========================================================================
-    # CLEAR
+    # CLEAR (Week 12 Enhanced)
     # =========================================================================
     def clear(self):
-        """Reset all inputs and outputs"""
-        # Clear trail
-        self.trail_clear()
-        
-        # Reset status
-        self.root_var.set("—")
-        self.iterations_var.set("—")
-        self.set_badge("Ready", "default")
-        
-        # Reset inputs to defaults
-        self.x0_entry.delete(0, tk.END)
-        self.tol_entry.delete(0, tk.END)
-        self.iter_entry.delete(0, tk.END)
-        self.x1_entry.delete(0, tk.END)
-        
-        self.x0_entry.insert(0, "1.5")
-        self.tol_entry.insert(0, "0.0001")
-        self.iter_entry.insert(0, "20")
-        self.x1_entry.insert(0, "2.0")
-        self.method_var.set("Newton-Raphson")
-        
-        # Reset test case selector
-        self.test_case_var.set("Select...")
-        
-        # Clear graph
-        if MATPLOTLIB_OK and self.ax:
-            colors = get_graph_colors()
-            self.ax.clear()
-            self.ax.set_facecolor(colors['axes_bg'])
-            self.ax.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.7)
-            self.ax.set_xlabel("x", fontsize=10, color=colors['text'])
-            self.ax.set_ylabel("f(x)", fontsize=10, color=colors['text'])
-            self.canvas.draw()
+        """Reset all inputs and outputs with error handling"""
+        try:
+            self.debug_log("CLEAR", "Clearing all inputs and outputs")
+            
+            # Clear trail
+            try:
+                self.trail_clear()
+            except Exception as exc:
+                self.debug_log("CLEAR", f"Trail clear warning: {exc}")
+            
+            # Reset status
+            self.root_var.set("—")
+            self.iterations_var.set("—")
+            self.set_badge("Ready", "default")
+            
+            # Reset inputs to defaults with safety
+            try:
+                self.x0_entry.delete(0, tk.END)
+                self.tol_entry.delete(0, tk.END)
+                self.iter_entry.delete(0, tk.END)
+                self.x1_entry.delete(0, tk.END)
+                
+                self.x0_entry.insert(0, "1.5")
+                self.tol_entry.insert(0, "0.0001")
+                self.iter_entry.insert(0, "20")
+                self.x1_entry.insert(0, "2.0")
+            except Exception as exc:
+                self.debug_log("CLEAR", f"Entry widget warning: {exc}")
+            
+            # Reset dropdowns
+            try:
+                self.method_var.set("Newton-Raphson")
+                self.test_case_var.set("Select...")
+            except Exception as exc:
+                self.debug_log("CLEAR", f"Dropdown warning: {exc}")
+            
+            # Clear graph with error handling
+            try:
+                if MATPLOTLIB_OK and self.ax:
+                    colors = get_graph_colors()
+                    self.ax.clear()
+                    self.ax.set_facecolor(colors['axes_bg'])
+                    self.ax.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.7)
+                    self.ax.set_xlabel("x", fontsize=10, color=colors['text'])
+                    self.ax.set_ylabel("f(x)", fontsize=10, color=colors['text'])
+                    self.canvas.draw()
+                    self.debug_log("CLEAR", "Graph cleared")
+            except Exception as exc:
+                self.debug_log("CLEAR", f"Graph clear warning: {exc}")
+            
+            self.debug_log("CLEAR", "Clear operation complete")
+            
+        except Exception as exc:
+            self.debug_log("CLEAR", f"CRITICAL ERROR: {exc}")
 
     def export_report(self):
-        """Export the full solution trail to a text report file."""
+        """Export the full solution trail to a text report file with comprehensive error handling."""
         try:
+            self.debug_log("EXPORT", "Export report initiated")
+            
+            # Check if trail has content
+            trail_content = self.trail.get("1.0", "end-1c").strip()
+            if not trail_content:
+                self.debug_log("EXPORT", "Trail is empty - cannot export")
+                messagebox.showwarning("Export", "No results to export. Please run a computation first.")
+                return
+            
             # Prompt user for save location
-            filename = filedialog.asksaveasfilename(
-                defaultextension=".txt",
-                filetypes=[("Text Files", "*.txt")],
-                initialfile="rootsync_report.txt",
-                title="Save report as"
-            )
+            try:
+                filename = filedialog.asksaveasfilename(
+                    defaultextension=".txt",
+                    filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
+                    initialfile="rootsync_report.txt",
+                    title="Save report as"
+                )
+            except Exception as exc:
+                self.debug_log("EXPORT", f"File dialog error: {exc}")
+                messagebox.showerror("Export Error", f"File dialog failed: {exc}")
+                return
 
             # User cancelled
             if not filename:
+                self.debug_log("EXPORT", "Export cancelled by user")
                 return
 
-            # Retrieve trail content (plain text)
+            self.debug_log("EXPORT", f"Saving to: {filename}")
+
+            # Retrieve and validate trail content
             content = self.trail.get("1.0", "end-1c")
+            if not content:
+                messagebox.showwarning("Export", "Trail is empty, cannot export.")
+                return
 
-            # Write to file using utf-8
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-            # Inform success
-            messagebox.showinfo("Export", "Report exported successfully")
+            # Write to file with comprehensive error handling
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.debug_log("EXPORT", f"Successfully wrote {len(content)} characters to {filename}")
+                messagebox.showinfo("Export Success", f"Report exported successfully to:\n{filename}")
+                
+            except PermissionError:
+                self.debug_log("EXPORT", f"Permission denied: {filename}")
+                messagebox.showerror(
+                    "Export Error", 
+                    f"Permission denied. Cannot write to:\n{filename}\n\nTry saving to a different location."
+                )
+            except IOError as exc:
+                self.debug_log("EXPORT", f"IO error: {exc}")
+                messagebox.showerror(
+                    "Export Error",
+                    f"File I/O error:\n{exc}\n\nPlease check the file path and try again."
+                )
+            except Exception as exc:
+                self.debug_log("EXPORT", f"Unexpected error: {exc.__class__.__name__}: {exc}")
+                messagebox.showerror(
+                    "Export Error",
+                    f"Failed to export report:\n{exc.__class__.__name__}: {exc}"
+                )
 
         except Exception as exc:
-            messagebox.showerror("Export Error", f"Failed to export report: {exc}")
+            # Outermost safety net
+            self.debug_log("EXPORT", f"CRITICAL ERROR: {exc.__class__.__name__}: {exc}")
+            messagebox.showerror("Export Error", f"Unexpected error: {exc}")
     
     # =========================================================================
-    # LOAD TEST CASE
+    # LOAD TEST CASE (Week 12 Enhanced)
     # =========================================================================
     def load_test_case(self, selection):
-        """Load a predefined test case into the input fields"""
-        if selection == "Select...":
-            return
+        """Load a predefined test case into the input fields with error handling"""
+        try:
+            if selection == "Select..." or not selection:
+                self.debug_log("TESTCASE", "Test case selection cancelled")
+                return
             
-        # Find the matching test case
-        for tc in TEST_CASES:
-            if tc['name'] == selection:
-                # Map function name to dropdown options
-                func_map = {
-                    "f(x) = x² − 4": "f(x) = x² - 4",
-                    "f(x) = x³ − x − 2": "f(x) = x³ - x - 2",
-                    "f(x) = e⁻ˣ − x": "f(x) = e⁻ˣ - x",
-                }
-                
-                # Set function (handle slight character differences)
-                func_key = tc['function']
-                if func_key in func_map:
-                    func_key = func_map[func_key]
-                    
-                # Find matching function in FUNCTIONS keys
-                for key in FUNCTIONS.keys():
-                    # Normalize comparison
-                    if func_key.replace('−', '-') == key.replace('−', '-'):
-                        self.func_var.set(key)
-                        break
-                
-                # Set initial guess
-                self.x0_entry.delete(0, tk.END)
-                self.x0_entry.insert(0, str(tc['x0']))
-                
-                # Set tolerance
-                self.tol_entry.delete(0, tk.END)
-                self.tol_entry.insert(0, str(tc['tol']))
-                
-                # Set max iterations
-                self.iter_entry.delete(0, tk.END)
-                self.iter_entry.insert(0, str(tc['max_iter']))
-                
-                break
+            self.debug_log("TESTCASE", f"Loading test case: {selection}")
+            
+            # Find the matching test case
+            for tc in TEST_CASES:
+                if tc['name'] == selection:
+                    try:
+                        # Map function name to dropdown options
+                        func_map = {
+                            "f(x) = x² − 4": "f(x) = x² - 4",
+                            "f(x) = x³ − x − 2": "f(x) = x³ - x - 2",
+                            "f(x) = e⁻ˣ − x": "f(x) = e⁻ˣ - x",
+                        }
+                        
+                        # Set function (handle slight character differences)
+                        func_key = tc['function']
+                        if func_key in func_map:
+                            func_key = func_map[func_key]
+                        
+                        # Find matching function in FUNCTIONS keys
+                        func_set = False
+                        for key in FUNCTIONS.keys():
+                            # Normalize comparison
+                            if func_key.replace('−', '-') == key.replace('−', '-'):
+                                self.func_var.set(key)
+                                func_set = True
+                                break
+                        
+                        if not func_set:
+                            self.debug_log("TESTCASE", f"Warning: Function not found: {func_key}")
+                        
+                        # Set initial guess
+                        self.x0_entry.delete(0, tk.END)
+                        self.x0_entry.insert(0, str(tc['x0']))
+                        
+                        # Set tolerance
+                        self.tol_entry.delete(0, tk.END)
+                        self.tol_entry.insert(0, str(tc['tol']))
+                        
+                        # Set max iterations
+                        self.iter_entry.delete(0, tk.END)
+                        self.iter_entry.insert(0, str(tc['max_iter']))
+                        
+                        # Set second guess if present (Secant Method)
+                        if 'x1' in tc:
+                            self.x1_entry.delete(0, tk.END)
+                            self.x1_entry.insert(0, str(tc['x1']))
+                            self.method_var.set("Secant Method")
+                        
+                        self.debug_log("TESTCASE", f"Test case {selection} loaded successfully")
+                        
+                    except Exception as exc:
+                        self.debug_log("TESTCASE", f"Loading error: {exc}")
+                        messagebox.showerror("Load Error", f"Failed to load test case: {exc}")
+                    break
+            
+        except Exception as exc:
+            self.debug_log("TESTCASE", f"CRITICAL ERROR: {exc}")
 
     def show_about_help(self):
         """Open a compact About/Help window for screenshots and quick reference"""

@@ -5,6 +5,7 @@ Engineering dashboard interface for Newton-Raphson root finder
 
 import sys
 import os
+import re
 import platform
 import math
 from datetime import datetime
@@ -92,6 +93,7 @@ class RootSyncApp:
         self.convergence_var = tk.StringVar(value="—")
         self.test_case_var = tk.StringVar(value="Select Test Case...")
         self.loading_dots = 0
+        self.latest_report_meta = None
         
     def create_ui(self):
         """Create the main UI layout"""
@@ -106,6 +108,49 @@ class RootSyncApp:
         self.create_control_panel()
         self.create_status_panel()
         self.create_main_content()
+        self.create_footer()
+
+    def create_footer(self):
+        """Create a release footer with version and quick help guidance."""
+        footer = tk.Frame(
+            self.main_container,
+            bg=COLORS['bg_secondary'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+            height=32,
+        )
+        footer.pack(fill='x', padx=DIMENSIONS['pad_xl'], pady=(0, DIMENSIONS['pad_md']))
+        footer.pack_propagate(False)
+
+        left = tk.Frame(footer, bg=COLORS['bg_secondary'])
+        left.pack(side='left', fill='y', padx=DIMENSIONS['pad_md'])
+
+        tk.Label(
+            left,
+            text=f"{self.APP_NAME} {self.APP_VERSION}",
+            font=FONTS['body_bold'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_primary']
+        ).pack(side='left')
+
+        tk.Label(
+            left,
+            text="  •  Final submission build",
+            font=FONTS['small'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_muted']
+        ).pack(side='left')
+
+        right = tk.Frame(footer, bg=COLORS['bg_secondary'])
+        right.pack(side='right', fill='y', padx=DIMENSIONS['pad_md'])
+
+        tk.Label(
+            right,
+            text="F1 About / Help  |  Export TXT report  |  Smooth screenshots",
+            font=FONTS['small'],
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_muted']
+        ).pack(side='right')
         
     # =========================================================================
     # HEADER SECTION
@@ -132,22 +177,12 @@ class RootSyncApp:
         
         title = tk.Label(
             title_frame,
-            text=self.APP_NAME,
+            text=f"{self.APP_NAME} {self.APP_VERSION}",
             font=FONTS['title'],
             bg=COLORS['bg_header'],
             fg=COLORS['text_primary']
         )
         title.pack(side='left')
-        
-        # Accent dot
-        dot = tk.Label(
-            title_frame,
-            text=" •",
-            font=FONTS['title'],
-            bg=COLORS['bg_header'],
-            fg=COLORS['accent_secondary']
-        )
-        dot.pack(side='left')
         
         # Subtitle
         subtitle = tk.Label(
@@ -815,6 +850,21 @@ class RootSyncApp:
         """Build the formatted solution trail with clear sections and real iteration data"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pyver = sys.version.split()[0]
+        self.latest_report_meta = {
+            "app_name": self.APP_NAME,
+            "app_version": self.APP_VERSION,
+            "func_name": func_name,
+            "method_name": method_name,
+            "timestamp": timestamp,
+            "python": pyver,
+            "platform": f"{platform.system()} {platform.release()}",
+            "graph_status": "Enabled" if MATPLOTLIB_OK else "Disabled",
+            "x0": x0,
+            "x1": x1,
+            "tol": tol,
+            "max_iter": max_iter,
+            "result": result,
+        }
         
         # ═══════════════════════════════════════════════════════════════════
         # GIVEN section
@@ -959,6 +1009,13 @@ class RootSyncApp:
         self.trail_insert(f"  Platform:    {platform.system()} {platform.release()}\n", "muted")
         self.trail_insert(f"  Graph:       {'Enabled' if MATPLOTLIB_OK else 'Disabled'}\n", "muted")
         self.trail_insert("\n", "normal")
+
+        self.latest_report_meta.update({
+            "root_estimate": root_est,
+            "converged": converged,
+            "iterations_used": it_used,
+            "stop_reason": stop_reason_display,
+        })
         
     def insert_section(self, title):
         """Insert a styled section header with clear visual separation"""
@@ -1431,11 +1488,13 @@ class RootSyncApp:
                 messagebox.showwarning("Export", "Trail is empty, cannot export.")
                 return
 
+            report_text = self.compose_export_report(content)
+
             # Write to file with comprehensive error handling
             try:
                 with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                self.debug_log("EXPORT", f"Successfully wrote {len(content)} characters to {filename}")
+                    f.write(report_text)
+                self.debug_log("EXPORT", f"Successfully wrote {len(report_text)} characters to {filename}")
                 messagebox.showinfo("Export Success", f"Report exported successfully to:\n{filename}")
                 
             except PermissionError:
@@ -1461,6 +1520,42 @@ class RootSyncApp:
             # Outermost safety net
             self.debug_log("EXPORT", f"CRITICAL ERROR: {exc.__class__.__name__}: {exc}")
             messagebox.showerror("Export Error", f"Unexpected error: {exc}")
+
+    def compose_export_report(self, trail_content):
+        """Build a polished export document with consistent spacing and metadata."""
+        normalized_trail = re.sub(r"\n{3,}", "\n\n", trail_content).strip()
+
+        lines = [
+            f"{self.APP_NAME} {self.APP_VERSION}",
+            "Final Solution Report",
+            "",
+        ]
+
+        meta = self.latest_report_meta or {}
+        if meta:
+            lines.extend([
+                f"Project Name: {meta.get('app_name', self.APP_NAME)}",
+                f"Version: {meta.get('app_version', self.APP_VERSION)}",
+                f"Method: {meta.get('method_name', 'Unknown')}",
+                f"Function: {meta.get('func_name', 'Unknown')}",
+                f"Generated: {meta.get('timestamp', '')}",
+                f"Platform: {meta.get('platform', '')}",
+                f"Graph: {meta.get('graph_status', 'Unknown')}",
+                "",
+                "Report Sections",
+                "-" * 72,
+                "",
+            ])
+
+        if normalized_trail:
+            lines.append(normalized_trail)
+
+        lines.extend([
+            "",
+            "End of Report",
+        ])
+
+        return "\n".join(lines).rstrip() + "\n"
     
     # =========================================================================
     # LOAD TEST CASE (Week 12 Enhanced)
@@ -1539,14 +1634,14 @@ class RootSyncApp:
 
         window = tk.Toplevel(self.root)
         self.about_window = window
-        window.title(f"About / Help - {self.APP_NAME}")
+        window.title(f"About / Help - {self.APP_NAME} {self.APP_VERSION}")
         window.configure(bg=COLORS['bg_primary'])
         window.resizable(False, False)
         window.transient(self.root)
         window.grab_set()
 
-        width = 640
-        height = 520
+        width = 720
+        height = 620
         x = self.root.winfo_x() + (self.root.winfo_width() - width) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - height) // 2
         window.geometry(f"{width}x{height}+{x}+{y}")
@@ -1554,41 +1649,75 @@ class RootSyncApp:
         outer = tk.Frame(window, bg=COLORS['bg_primary'])
         outer.pack(fill='both', expand=True, padx=20, pady=20)
 
-        header = tk.Frame(outer, bg=COLORS['bg_header'])
+        header = tk.Frame(
+            outer,
+            bg=COLORS['bg_header'],
+            highlightbackground=COLORS['border_light'],
+            highlightthickness=1,
+        )
         header.pack(fill='x')
 
+        hero = tk.Frame(header, bg=COLORS['bg_header'])
+        hero.pack(fill='x', padx=18, pady=(16, 12))
+
         tk.Label(
-            header,
-            text=self.APP_NAME,
+            hero,
+            text=f"{self.APP_NAME} {self.APP_VERSION}",
             font=FONTS['title'],
             bg=COLORS['bg_header'],
-            fg=COLORS['text_inverse']
+            fg=COLORS['text_primary']
         ).pack(anchor='w', padx=16, pady=(14, 2))
 
         tk.Label(
-            header,
-            text=f"Newton-Raphson / Secant Visual Root Finder  •  {self.APP_VERSION}",
+            hero,
+            text="Newton-Raphson and Secant Method visual root finding with documented solutions, graph output, and exportable reports.",
             font=FONTS['subtitle'],
             bg=COLORS['bg_header'],
+            fg=COLORS['text_secondary'],
+            justify='left',
+            wraplength=650
+        ).pack(anchor='w', padx=16, pady=(0, 4))
+
+        badge_row = tk.Frame(hero, bg=COLORS['bg_header'])
+        badge_row.pack(anchor='w', padx=16, pady=(8, 0))
+
+        tk.Label(
+            badge_row,
+            text="Release 1.0",
+            font=FONTS['badge'],
+            bg=COLORS['accent_light'],
+            fg=COLORS['accent_primary'],
+            padx=10,
+            pady=4
+        ).pack(side='left')
+
+        tk.Label(
+            badge_row,
+            text="F1 anywhere opens this panel",
+            font=FONTS['small'],
+            bg=COLORS['bg_header'],
             fg=COLORS['text_muted']
-        ).pack(anchor='w', padx=16, pady=(0, 14))
+        ).pack(side='left', padx=(10, 0))
 
         card = tk.Frame(outer, bg=COLORS['bg_secondary'], highlightbackground=COLORS['border_light'], highlightthickness=1)
         card.pack(fill='both', expand=True, pady=(16, 0))
 
         card_inner = tk.Frame(card, bg=COLORS['bg_secondary'])
-        card_inner.pack(fill='both', expand=True, padx=16, pady=16)
+        card_inner.pack(fill='both', expand=True, padx=18, pady=18)
 
         sections = [
             ("Project Name", self.APP_NAME),
             ("Version", self.APP_VERSION),
-            ("Members", "\n".join(f"- {member}" for member in self.TEAM_MEMBERS)),
-            ("How to Use", "1. Choose Newton-Raphson or Secant Method.\n2. Select a function and enter the guesses.\n3. Click Calculate.\n4. Review the trail, graph, and final answer."),
+            ("Group Members", "\n".join(f"• {member}" for member in self.TEAM_MEMBERS)),
+            ("Short Description", "RootSync is a desktop Tkinter application for visual numerical root finding using Newton-Raphson and Secant Method workflows with validation, verification, graph plotting, and exportable documentation."),
+            ("Supported Methods", "• Newton-Raphson\n• Secant Method"),
+            ("Main Features", "• Graph plotting\n• Verification\n• Export reports\n• Solution trail"),
+            ("Quick Use", "1. Choose a function and method.\n2. Enter the initial guesses, tolerance, and iterations.\n3. Click Calculate to view the graph and trail.\n4. Use Export Report to save the documented results."),
         ]
 
         for title, body in sections:
             section_frame = tk.Frame(card_inner, bg=COLORS['bg_secondary'])
-            section_frame.pack(fill='x', anchor='w', pady=(0, 12))
+            section_frame.pack(fill='x', anchor='w', pady=(0, 14))
 
             tk.Label(
                 section_frame,
@@ -1605,7 +1734,7 @@ class RootSyncApp:
                 bg=COLORS['bg_secondary'],
                 fg=COLORS['text_primary'],
                 justify='left',
-                wraplength=580
+                wraplength=650
             ).pack(anchor='w', pady=(2, 0))
 
         footer = tk.Frame(outer, bg=COLORS['bg_primary'])
